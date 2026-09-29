@@ -1,0 +1,201 @@
+{
+  "project_name": "ProntuAI",
+  "product_type": "Multi-tenant Clinical Management SaaS & AI Voice EHR",
+  "target_locale": "pt-BR",
+  "theme_strategy": "dark-mode-default (Deep Obsidian Slate #0B0F17 with crisp tactical borders and luminous indigo/cyan/emerald telemetry accents)",
+  "design_archetype": "Archetype 2 + Swiss Precision: High-Performance Clinical Command Center. Eliminates visual clutter typical of legacy medical software; uses sharp cardless or 8px crisp radius, frosted HUD overlays, high-contrast typography, and live voice transcription telemetry widgets.",
+  "typography": {
+    "font_family_heading": "Outfit Variable, sans-serif",
+    "font_family_sans": "Plus Jakarta Sans Variable, sans-serif",
+    "font_family_mono": "JetBrains Mono Variable, monospace",
+    "font_import_instruction": "In frontend/src/index.css import '@fontsource-variable/outfit'; and '@fontsource-variable/plus-jakarta-sans'; and '@fontsource-variable/jetbrains-mono';",
+    "scale_px": {
+      "display": 56,
+      "h1": 40,
+      "h2": 30,
+      "h3": 22,
+      "h4": 18,
+      "body": 15,
+      "caption": 13
+    },
+    "rules": {
+      "headings": "font-heading font-semibold tracking-tight text-slate-100",
+      "overlines": "text-[11px] uppercase tracking-[0.2em] font-mono text-cyan-400 font-semibold",
+      "body": "font-sans leading-relaxed text-slate-300",
+      "data_values": "font-mono font-medium tracking-tight"
+    }
+  },
+  "colors": {
+    "surfaces": [
+      {
+        "name": "page",
+        "kind": "solid",
+        "bg": "#0B0F17",
+        "on_bg": "#F1F5F9",
+        "on_bg_muted": "#94A3B8",
+        "roles": {
+          "border": "#1E293B",
+          "link": "#38BDF8",
+          "brand": "#6366F1"
+        }
+      },
+      {
+        "name": "sidebar",
+        "kind": "solid",
+        "bg": "#070B11",
+        "on_bg": "#F8FAFC",
+        "on_bg_muted": "#64748B",
+        "roles": {
+          "border": "#1E293B",
+          "active_tab_bg": "#1E1B4B",
+          "active_tab_text": "#A5B4FC"
+        }
+      },
+      {
+        "name": "card_panel",
+        "kind": "solid",
+        "bg": "#111827",
+        "on_bg": "#F8FAFC",
+        "on_bg_muted": "#94A3B8",
+        "roles": {
+          "border": "#1F2937",
+          "hover_border": "#374151",
+          "card_inner_bg": "#161F30"
+        }
+      },
+      {
+        "name": "voice_recording_hud",
+        "kind": "solid",
+        "bg": "#180E29",
+        "on_bg": "#FAF5FF",
+        "on_bg_muted": "#D8B4FE",
+        "roles": {
+          "border": "#7E22CE",
+          "waveform_active": "#C084FC",
+          "pulse_ring": "#9333EA"
+        }
+      },
+      {
+        "name": "badge_success",
+        "kind": "solid",
+        "bg": "#064E3B",
+        "on_bg": "#34D399",
+        "on_bg_muted": "#6EE7B7"
+      },
+      {
+        "name": "badge_warning",
+        "kind": "solid",
+        "bg": "#78350F",
+        "on_bg": "#FBBF24",
+        "on_bg_muted": "#FCD34D"
+      },
+      {
+        "name": "badge_danger",
+        "kind": "solid",
+        "bg": "#7F1D1D",
+        "on_bg": "#F87171",
+        "on_bg_muted": "#FCA5A5"
+      },
+      {
+        "name": "badge_ai",
+        "kind": "solid",
+        "bg": "#312E81",
+        "on_bg": "#818CF8",
+        "on_bg_muted": "#C7D2FE"
+      },
+      {
+        "name": "glass_modal",
+        "kind": "glass",
+        "contrast_against": "#0F172A",
+        "guarantee": "backdrop-blur-2xl bg-slate-950/85 border border-slate-800 shadow-2xl",
+        "on_bg": "#F8FAFC",
+        "on_bg_muted": "#94A3B8"
+      }
+    ],
+    "accent": "#6366F1",
+    "on_accent": "#FFFFFF",
+    "secondary_accent": "#06B6D4",
+    "ai_pulse_color": "#A855F7"
+  },
+  "entry_surfaces": {
+    "/": "Multi-tenant clinical command center — metric HUD & agenda overview with quick patient triage and voice action trigger",
+    "/login": "Branded dual-panel auth — left clinical positioning & security seal, right multi-tenant tenant-switcher + credentials form",
+    "/portal/login": "Patient portal gateway — clean credential or CPF/phone access with appointment confirmation preview"
+  },
+  "layout_and_grids": {
+    "app_shell": "2-column layout with collapsible sidebar (w-64) + fixed glass top header (h-16) + main scrollable content area (p-6 or p-8)",
+    "dashboard_grid": "High Density Grid (Mode B): 4-column metric HUD (Total Pacientes, Consultas Hoje, Faturamento Mês, Tempo Médio com IA) + 8-col Agenda do Dia with 4-col Atendimentos Recentes/Ações Rápidas",
+    "medical_record_layout": "3-column split view: Column 1 (Patient Bio, Allergies, Vital Signs), Column 2 (Active SOAP/Consultation tab with AI Voice Dictation HUD + Dynamic Module like Odontograma 32-teeth or Visual Acuity Snellen chart), Column 3 (Historical Timeline & Prescriptions/Attachments)",
+    "super_admin_layout": "Bento Grid with Global MRR, Active Tenants count, Tenant Health Status table (with Lock/Unlock toggle, Plan switch, Impersonation jump), and Plan tier builder/editor",
+    "marketing_campaign_layout": "Split Composer: Left (Target Patient filters, Channel WhatsApp/SMS/Email, Template tags like {nome_paciente}), Right (Live Phone simulator preview + Disparo logs with status deliverability metrics)"
+  },
+  "component_specifications": {
+    "voice_dictation_hud": {
+      "path": "frontend/src/components/clinical/VoiceDictationHUD.jsx",
+      "states": ["idle (Microfone pronto)", "recording (Ouvindo com onda de áudio animada)", "processing (IA estruturando campos SOAP/Odonto/Oftalmo)", "success (Campos auto-preenchidos)"],
+      "features": "Speech-to-text simulation with realistic medical sample transcriptions (e.g. 'Paciente relata dor no dente 16 ao mastigar', 'Acuidade visual OD 20/40 com queixa de cefaleia frontal', 'Hipertensão estágio 1, mantido Losartana 50mg'). Button to structure SOAP fields instantly via AI.",
+      "test_ids": ["voice-record-btn", "voice-transcription-preview", "ai-apply-fields-btn", "voice-status-indicator"]
+    },
+    "odontogram_interactive": {
+      "path": "frontend/src/components/clinical/OdontogramView.jsx",
+      "description": "Interactive 32-tooth dental chart (FDI / Universal numbering). Clinicians click any tooth (11 to 48) to assign status (Hígido, Cárie, Restauração, Extração, Canal, Prótese) and view color-coded surfaces (Vestibular, Lingual, Oclusal, Mesial, Distal).",
+      "test_ids": ["odontogram-container", "tooth-card-11", "tooth-card-16", "tooth-status-select", "odontogram-summary"]
+    },
+    "visual_acuity_ophthalmology": {
+      "path": "frontend/src/components/clinical/VisualAcuityView.jsx",
+      "description": "Specialized eye-care exam widget for Snellen chart acuity (OD/OS/OU), autorefraction (Esférico, Cilíndrico, Eixo, DNP), IOP (Tonometria) and Fundus exam findings.",
+      "test_ids": ["visual-acuity-od-input", "visual-acuity-os-input", "intraocular-pressure-input", "save-ophthalmo-exam-btn"]
+    },
+    "super_admin_panel": {
+      "path": "frontend/src/pages/SuperAdmin.jsx",
+      "description": "Master SaaS control for managing clinical tenants: CRUD of customizable subscription tiers (Starter, Pro, Enterprise with custom patient/user limits and pricing), Global Clinic tenant list, Inadimplente lock/unlock switch, and global billing metrics.",
+      "test_ids": ["superadmin-tenants-table", "tenant-lock-toggle", "plan-builder-card", "create-plan-btn", "global-revenue-metric"]
+    },
+    "rbac_team_management": {
+      "path": "frontend/src/pages/TeamManagement.jsx",
+      "description": "Granular checkbox-based permissions matrix for Clinic Staff (Roles: Admin da Clínica, Médico/Dentista, Recepcionista, Financeiro). Permissions: 'Ver Prontuário', 'Editar Agenda', 'Disparar Campanhas', 'Acessar Financeiro', 'Excluir Pacientes'.",
+      "test_ids": ["team-members-list", "role-select", "perm-checkbox-prontuario", "perm-checkbox-financeiro", "save-member-perms-btn"]
+    },
+    "marketing_campaigns": {
+      "path": "frontend/src/pages/MarketingCampaigns.jsx",
+      "description": "Omnichannel blast system (WhatsApp, SMS, E-mail) for patient recall (e.g. 'Retorno semestral Odonto', 'Prevenção Glaucoma', 'Aniversariantes do Mês'). Includes live WhatsApp chat balloon preview and dispatch history table.",
+      "test_ids": ["campaign-type-select", "campaign-message-textarea", "target-audience-filter", "launch-campaign-btn", "campaigns-history-table"]
+    },
+    "patient_portal": {
+      "path": "frontend/src/pages/PatientPortal.jsx",
+      "description": "Patient self-service interface showing Upcoming Appointments, Past Consultations, Prescriptions/Exam downloads, and a fast 3-step 'Agendar Nova Consulta' booking modal.",
+      "test_ids": ["patient-portal-nav", "upcoming-appointments-list", "book-new-appointment-btn", "appointment-date-picker", "confirm-booking-btn"]
+    }
+  },
+  "media_assets": [
+    {
+      "category": "hero_or_clinical_portrait",
+      "url": "https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAxODF8MHwxfHNlYXJjaHwxfHxkb2N0b3IlMjBtZWRpY2FsJTIwY2xpbmljfGVufDB8fHx8MTc5MDY5NDU3M3ww&ixlib=rb-4.1.0&q=85",
+      "description": "Doctor in clinical uniform with stethoscope for doctor avatar and clinic branding"
+    },
+    {
+      "category": "dental_facility",
+      "url": "https://images.unsplash.com/photo-1629909613654-28e377c37b09?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzd8MHwxfHNlYXJjaHwxfHxkZW50aXN0JTIwY2xpbmljJTIwYXBwb2ludG1lbnR8ZW58MHx8fHwxNzkwNjk0NTczfDA&ixlib=rb-4.1.0&q=85",
+      "description": "Modern high-tech clinic suite for clinic profile cover and patient portal header"
+    },
+    {
+      "category": "clinical_doctor_notes",
+      "url": "https://images.unsplash.com/photo-1758691461990-03b49d969495?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAxODF8MHwxfHNlYXJjaHwzfHxkb2N0b3IlMjBtZWRpY2FsJTIwY2xpbmljfGVufDB8fHx8MTc5MDY5NDU3M3ww&ixlib=rb-4.1.0&q=85",
+      "description": "Clinician reviewing medical record"
+    }
+  ],
+  "instructions_to_main_agent": [
+    "1. Strict Multi-Tenancy Simulation: In the mock state or backend schema, ensure every patient, appointment, record, and campaign is bound to a 'tenant_id' (e.g. 'clinic-odonto-alphaville', 'clinic-oftalmo-centro', 'clinic-med-vida'). Provide a prominent Tenant Selector in the top bar for instant switching so the user can verify complete data isolation.",
+    "2. Super Admin Access: Provide a quick 'Alternar para Visão Super Admin' toggle or role badge so testers can seamlessly inspect the Super Admin billing and tenant management dashboard.",
+    "3. Voice Dictation Experience: Build a fully interactive Voice HUD inside the Medical Record (Prontuário). When the user clicks 'Gravar Voz', animate a dynamic waveform audio bar with realistic transcription simulation that automatically parses into: Queixa Principal, História da Moléstia Atual, Exame Físico/Diagnóstico, Conduta/Prescrição, e Dentes afetados ou Acuidade.",
+    "4. Specialty Modules: Build dynamic tabs inside the Prontuário for (a) Clínica Geral (SOAP padrão), (b) Odontologia (Odontograma interativo 32 dentes com status por dente), (c) Oftalmologia (Tabela de Acuidade Visual Snellen + Refração).",
+    "5. Dark Mode by Default: Set class='dark' in html tag and craft a high-contrast palette with deep slate #0B0F17, crisp borders (#1E293B), vibrant cyan/indigo accents, and clear typography in Portuguese (pt-BR).",
+    "6. Patient Portal: Add a dedicated route or view (/portal) where patients can log in or view their agenda, download simulated PDF prescriptions, and book appointments.",
+    "7. Data Test IDs: Add kebab-case 'data-testid' attributes to all buttons, inputs, modals, tabs, and status toggles for 100% test reliability."
+  ],
+  "accessibility_and_motion": {
+    "wcag_compliance": "WCAG 2.1 AA certified with minimum 4.5:1 contrast for all text against dark surfaces",
+    "motion_policy": "Framer Motion (motion/react) micro-interactions for tab transitions, voice HUD pulsing, and modal popups. Uses prefers-reduced-motion fallback.",
+    "keyboard_navigation": "Full focus-visible rings with 'focus-visible:ring-2 focus-visible:ring-indigo-500'"
+  }
+}

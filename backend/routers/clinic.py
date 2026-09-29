@@ -1,0 +1,291 @@
+"""All clinic-scoped resources. Every query is built from tenant_filter(user)."""
+
+from datetime import datetime, timedelta, timezone
+
+from fastapi import APIRouter, Depends, HTTPException
+
+from lib.auth import PERMISSIONS, ROLE_DEFAULTS, effective_permissions, hash_password, public_user, require_perm, require_tenant_user, tenant_filter
+from lib.dates import today_iso
+from lib.db import db
+from models.schemas import (
+    AppointmentIn,
+    AppointmentOut,
+    AppointmentPatch,
+    CampaignIn,
+    CampaignOut,
+    MemberIn,
+    MemberPatch,
+    Patient,
+    PatientIn,
+    RecordIn,
+    RecordOut,
+    UserOut,
+    new_id,
+    utcnow,
+)
+
+router = APIRouter(prefix="/clinic", tags=["clinic"])
+
+
+@router.get("/permissions")
+async def permission_catalog(user: dict = Depends(require_tenant_user)):
+    return {"permissions": PERMISSIONS, "role_defaults": ROLE_DEFAULTS}
+
+
+# ---------- dashboard ----------
+@router.get("/overview")
+async def overview(user: dict = Depends(require_tenant_user)):
+    today = today_iso()
+    month = today[:7]
+    appts_today = await db.appointments.find(
+        tenant_filter(user, {"date": today}), {"_id": 0}
+    ).sort("time", 1).to_list(200)
+    month_appts = await db.appointments.find(
+        tenant_filter(user, {"date": {"$regex": f"^{month}"}}), {"_id": 0}
+    ).to_list(1000)
+    revenue = sum(a.get("price", 0) for a in month_appts if a.get("status") == "done")
+    patient_names = {
+        p["id"]: p["name"]
+        for p in await db.patients.find(tenant_filter(user), {"_id": 0, "id": 1, "name": 1}).to_list(2000)
+    }
+    for a in appts_today:
+        a["patient_name"] = patient_names.get(a["patient_id"], "—")
+    return {
+        "date": today,
+        "patients_total": await db.patients.count_documents(tenant_filter(user)),
+        "appointments_today": len(appts_today),
+        "appointments_month": len(month_appts),
+        "revenue_month": round(revenue, 2),
+        "records_total": await db.records.count_documents(tenant_filter(user)),
+        "agenda_today": appts_today,
+    }
+
+
+# ---------- patients ----------
+@router.get("/patients", response_model=list[Patient])
+async def list_patients(user: dict = Depends(require_perm("patients.view"))):
+    docs = await db.patients.find(tenant_filter(user), {"_id": 0}).sort("name", 1).to_list(1000)
+    return [Patient(**d) for d in docs]
+
+
+@router.post("/patients", response_model=Patient, status_code=201)
+async def create_patient(payload: PatientIn, user: dict = Depends(require_perm("patients.edit"))):
+    if await db.patients.find_one(tenant_filter(user, {"cpf": payload.cpf})):
+        raise HTTPException(status_code=409, detail="CPF já cadastrado nesta clínica")
+    p = Patient(tenant_id=user["tenant_id"], **payload.model_dump())
+    await db.patients.insert_one(p.model_dump())
+    return p
+
+
+@router.get("/patients/{patient_id}", response_model=Patient)
+async def get_patient(patient_id: str, user: dict = Depends(require_perm("patients.view"))):
+    doc = await db.patients.find_one(tenant_filter(user, {"id": patient_id}), {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Paciente não encontrado")
+    return Patient(**doc)
+
+
+@router.put("/patients/{patient_id}", response_model=Patient)
+async def update_patient(patient_id: str, payload: PatientIn, user: dict = Depends(require_perm("patients.edit"))):
+    doc = await db.patients.find_one_and_update(
+        tenant_filter(user, {"id": patient_id}),
+        {"$set": payload.model_dump()},
+        return_document=True,
+        projection={"_id": 0},
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Paciente não encontrado")
+    return Patient(**doc)
+
+
+@router.delete("/patients/{patient_id}")
+async def delete_patient(patient_id: str, user: dict = Depends(require_perm("patients.edit"))):
+    res = await db.patients.delete_one(tenant_filter(user, {"id": patient_id}))
+    if not res.deleted_count:
+        raise HTTPException(status_code=404, detail="Paciente não encontrado")
+    await db.appointments.delete_many(tenant_filter(user, {"patient_id": patient_id}))
+    await db.records.delete_many(tenant_filter(user, {"patient_id": patient_id}))
+    return {"ok": True}
+
+
+# ---------- appointments ----------
+async def _decorate(appts: list, user: dict) -> list:
+    patients = {
+        p["id"]: p["name"]
+        for p in await db.patients.find(tenant_filter(user), {"_id": 0, "id": 1, "name": 1}).to_list(2000)
+    }
+    pros = {
+        u["id"]: u["name"]
+        for u in await db.users.find({"tenant_id": user["tenant_id"]}, {"_id": 0, "id": 1, "name": 1}).to_list(500)
+    }
+    out = []
+    for a in appts:
+        a["patient_name"] = patients.get(a["patient_id"], "—")
+        a["professional_name"] = pros.get(a.get("professional_id"), None)
+        out.append(AppointmentOut(**a))
+    return out
+
+
+@router.get("/appointments", response_model=list[AppointmentOut])
+async def list_appointments(date: str | None = None, user: dict = Depends(require_perm("agenda.view"))):
+    flt = tenant_filter(user, {"date": date} if date else None)
+    docs = await db.appointments.find(flt, {"_id": 0}).sort([("date", 1), ("time", 1)]).to_list(1000)
+    return await _decorate(docs, user)
+
+
+@router.post("/appointments", response_model=AppointmentOut, status_code=201)
+async def create_appointment(payload: AppointmentIn, user: dict = Depends(require_perm("agenda.edit"))):
+    if not await db.patients.find_one(tenant_filter(user, {"id": payload.patient_id})):
+        raise HTTPException(status_code=404, detail="Paciente não encontrado nesta clínica")
+    doc = {
+        "id": new_id(),
+        "tenant_id": user["tenant_id"],
+        **payload.model_dump(),
+        "status": "scheduled",
+        "price": 0,
+        "created_at": utcnow(),
+    }
+    await db.appointments.insert_one(dict(doc))
+    return (await _decorate([doc], user))[0]
+
+
+@router.patch("/appointments/{appointment_id}", response_model=AppointmentOut)
+async def patch_appointment(appointment_id: str, payload: AppointmentPatch, user: dict = Depends(require_perm("agenda.edit"))):
+    update = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if not update:
+        raise HTTPException(status_code=422, detail="Nada para atualizar")
+    doc = await db.appointments.find_one_and_update(
+        tenant_filter(user, {"id": appointment_id}), {"$set": update}, return_document=True, projection={"_id": 0}
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Agendamento não encontrado")
+    return (await _decorate([doc], user))[0]
+
+
+# ---------- medical records ----------
+@router.get("/records", response_model=list[RecordOut])
+async def list_records(patient_id: str | None = None, user: dict = Depends(require_perm("records.view"))):
+    flt = tenant_filter(user, {"patient_id": patient_id} if patient_id else None)
+    docs = await db.records.find(flt, {"_id": 0}).sort("created_at", -1).to_list(500)
+    authors = {
+        u["id"]: u["name"]
+        for u in await db.users.find({"tenant_id": user["tenant_id"]}, {"_id": 0, "id": 1, "name": 1}).to_list(500)
+    }
+    for d in docs:
+        d["author_name"] = authors.get(d.get("author_id"))
+    return [RecordOut(**d) for d in docs]
+
+
+@router.post("/records", response_model=RecordOut, status_code=201)
+async def create_record(payload: RecordIn, user: dict = Depends(require_perm("records.edit"))):
+    if not await db.patients.find_one(tenant_filter(user, {"id": payload.patient_id})):
+        raise HTTPException(status_code=404, detail="Paciente não encontrado nesta clínica")
+    doc = {
+        "id": new_id(),
+        "tenant_id": user["tenant_id"],
+        **payload.model_dump(),
+        "author_id": user["id"],
+        "created_at": utcnow(),
+    }
+    await db.records.insert_one(dict(doc))
+    doc["author_name"] = user["name"]
+    return RecordOut(**doc)
+
+
+# ---------- team / RBAC ----------
+@router.get("/team", response_model=list[UserOut])
+async def list_team(user: dict = Depends(require_perm("team.manage"))):
+    docs = await db.users.find({"tenant_id": user["tenant_id"]}, {"_id": 0}).sort("name", 1).to_list(500)
+    return [UserOut(**public_user(d)) for d in docs]
+
+
+@router.post("/team", response_model=UserOut, status_code=201)
+async def create_member(payload: MemberIn, user: dict = Depends(require_perm("team.manage"))):
+    email = payload.email.lower().strip()
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(status_code=409, detail="E-mail já cadastrado")
+    tenant = await db.tenants.find_one({"id": user["tenant_id"]}, {"_id": 0})
+    plan = await db.plans.find_one({"id": tenant.get("plan_id")}, {"_id": 0}) if tenant else None
+    if plan:
+        count = await db.users.count_documents({"tenant_id": user["tenant_id"]})
+        if count >= plan["max_users"]:
+            raise HTTPException(status_code=409, detail=f"Limite do plano atingido ({plan['max_users']} usuários)")
+    perms = payload.permissions or ROLE_DEFAULTS.get(payload.role, [])
+    doc = {
+        "id": new_id(),
+        "tenant_id": user["tenant_id"],
+        "name": payload.name,
+        "email": email,
+        "password_hash": hash_password(payload.password or "prontuai123"),
+        "role": payload.role,
+        "specialty": payload.specialty,
+        "permissions": [p for p in perms if p in PERMISSIONS],
+        "active": payload.active,
+        "created_at": utcnow(),
+    }
+    await db.users.insert_one(dict(doc))
+    return UserOut(**public_user(doc))
+
+
+@router.patch("/team/{member_id}", response_model=UserOut)
+async def patch_member(member_id: str, payload: MemberPatch, user: dict = Depends(require_perm("team.manage"))):
+    update = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if "permissions" in update:
+        update["permissions"] = [p for p in update["permissions"] if p in PERMISSIONS]
+    if not update:
+        raise HTTPException(status_code=422, detail="Nada para atualizar")
+    if member_id == user["id"] and update.get("active") is False:
+        raise HTTPException(status_code=409, detail="Você não pode desativar a si mesmo")
+    doc = await db.users.find_one_and_update(
+        {"id": member_id, "tenant_id": user["tenant_id"]},
+        {"$set": update},
+        return_document=True,
+        projection={"_id": 0},
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Membro não encontrado")
+    return UserOut(**public_user(doc))
+
+
+@router.delete("/team/{member_id}")
+async def delete_member(member_id: str, user: dict = Depends(require_perm("team.manage"))):
+    if member_id == user["id"]:
+        raise HTTPException(status_code=409, detail="Você não pode remover a si mesmo")
+    res = await db.users.delete_one({"id": member_id, "tenant_id": user["tenant_id"]})
+    if not res.deleted_count:
+        raise HTTPException(status_code=404, detail="Membro não encontrado")
+    return {"ok": True}
+
+
+# ---------- marketing campaigns (envio SIMULADO) ----------
+@router.get("/campaigns", response_model=list[CampaignOut])
+async def list_campaigns(user: dict = Depends(require_perm("campaigns.send"))):
+    docs = await db.campaigns.find(tenant_filter(user), {"_id": 0}).sort("created_at", -1).to_list(200)
+    return [CampaignOut(**d) for d in docs]
+
+
+@router.post("/campaigns", response_model=CampaignOut, status_code=201)
+async def send_campaign(payload: CampaignIn, user: dict = Depends(require_perm("campaigns.send"))):
+    patients = await db.patients.find(tenant_filter(user), {"_id": 0}).to_list(5000)
+    if payload.audience == "birthdays":
+        month = today_iso()[5:7]
+        patients = [p for p in patients if (p.get("birth_date") or "")[5:7] == month]
+    elif payload.audience == "inactive":
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=180)).isoformat()[:10]
+        recent = {
+            a["patient_id"]
+            for a in await db.appointments.find(
+                tenant_filter(user, {"date": {"$gte": cutoff}}), {"_id": 0, "patient_id": 1}
+            ).to_list(5000)
+        }
+        patients = [p for p in patients if p["id"] not in recent]
+    doc = {
+        "id": new_id(),
+        "tenant_id": user["tenant_id"],
+        **payload.model_dump(),
+        "recipients": len(patients),
+        "status": "sent",
+        "created_at": utcnow(),
+    }
+    await db.campaigns.insert_one(dict(doc))
+    return CampaignOut(**doc)
