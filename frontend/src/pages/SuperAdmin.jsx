@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, Ban, Building2, CheckCircle2, LogOut, Plus, TrendingUp, Users } from "lucide-react";
 import { toast } from "sonner";
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/lib/api";
+import AssistantWidget from "@/components/AssistantWidget";
 import { useMe } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -400,6 +401,8 @@ export default function SuperAdmin() {
           </TabsContent>
         </Tabs>
       </main>
+
+      <AssistantWidget />
     </div>
   );
 }

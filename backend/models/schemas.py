@@ -196,6 +196,26 @@ class StructureOut(BaseModel):
     model: str
 
 
+# ---------- assistente ----------
+class AskIn(BaseModel):
+    question: str
+    history: list[dict[str, Any]] = []
+
+
+class AskOut(BaseModel):
+    answer: str
+    model: str
+
+
+class SpeakIn(BaseModel):
+    text: str
+
+
+class SpeakOut(BaseModel):
+    audio_url: str
+    voice_id: str
+
+
 # ---------- patient portal ----------
 class PortalLoginIn(BaseModel):
     cpf: str

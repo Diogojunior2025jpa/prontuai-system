@@ -4,6 +4,7 @@ import {
   Activity, Calendar, LayoutDashboard, LogOut, Megaphone, ShieldCheck, Stethoscope, Users, UsersRound,
 } from "lucide-react";
 import { apiGet } from "@/lib/api";
+import AssistantWidget from "@/components/AssistantWidget";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ROLE_LABELS, SPECIALTY_LABELS, endSession, hasPerm } from "@/lib/session";
@@ -135,6 +136,8 @@ export default function AppShell({ children, title, subtitle, actions }) {
           {children}
         </main>
       </div>
+
+      <AssistantWidget />
     </div>
   );
 }

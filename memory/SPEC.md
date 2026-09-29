@@ -53,6 +53,8 @@ por `hasPerm()`.
   `/clinic/records` (GET/POST), `/clinic/team` (GET/POST/PATCH/DELETE), `/clinic/campaigns` (GET/POST),
   `GET /clinic/permissions`
 - IA: `POST /ai/transcribe` (multipart audio → transcrição + campos), `POST /ai/structure` (texto → campos)
+- Assistente: `POST /assistant/ask` (pergunta + histórico → resposta adaptada ao papel),
+  `POST /assistant/speak` (texto → MP3 base64 via ElevenLabs), `GET /assistant/voice-status`
 - Portal do paciente: `POST /portal/login` (CPF + nascimento, cookie `prontuai_portal`),
   `GET /portal/me`, `GET/POST /portal/appointments`, `POST /portal/logout`
 
@@ -67,6 +69,30 @@ por `hasPerm()`.
 4. Equipe: checkbox por permissão, persistido em `users.permissions`.
 5. Campanhas: filtra público (todos/aniversariantes/inativos), registra disparo — **MOCK**,
    nenhuma mensagem real é enviada.
+
+## Assistente ProntuAI (chat com voz)
+
+Widget flutuante ("Dúvidas? Pergunte") presente em todas as telas logadas da clínica e no
+Super Admin (`components/AssistantWidget.jsx`).
+
+- **Texto**: Groq `openai/gpt-oss-120b`. O prompt do sistema (`routers/assistant.py::SYSTEM_KNOWLEDGE`)
+  contém a base de conhecimento do produto inteiro + os nomes exatos dos botões, para o assistente
+  não inventar etapas. O contexto injeta nome, papel, clínica e permissões efetivas do usuário —
+  por isso a resposta é adaptada ao papel: quem não tem `finance.view` é orientado a pedir a
+  liberação ao Admin em Equipe & Permissões, em vez de receber o caminho do módulo.
+- **Escopo**: uso do sistema **e** dúvidas clínicas/médicas (escolha do usuário), com enquadramento
+  de apoio à decisão — a responsabilidade final é sempre do profissional, e nunca prescreve dose
+  para o paciente final.
+- **Honestidade sobre limites**: o prompt lista explicitamente o que o sistema não faz (campanha
+  simulada, sem app nativo, sem emissão fiscal/convênios/receita assinada).
+- **Voz**: ElevenLabs REST via httpx, voz "Adam" (`pNInz6obpgDQGcFmaJgB`),
+  modelo `eleven_multilingual_v2` (pt-BR), retornada como MP3 base64. `ELEVENLABS_API_KEY` fica no
+  `backend/.env`; a chave nunca chega ao navegador. Sem chave válida, `voice-status.configured`
+  é `false` e a UI simplesmente esconde o botão "Ouvir a resposta" — o chat de texto continua
+  funcionando (degradação graciosa).
+- **Estado da chave**: a chave fornecida pelo usuário (`9cf6b26...`) é o **ID** da chave, recusada
+  pela ElevenLabs com `api_key_id_used_as_api_key`. A chave real começa com `sk_`. Basta preencher
+  `ELEVENLABS_API_KEY` no `.env` e reiniciar o backend para a voz ativar, sem mudança de código.
 
 ## Desvios conscientes do pedido original
 
