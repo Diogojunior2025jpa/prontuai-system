@@ -1,6 +1,7 @@
-// Fetch layer over the FastAPI backend. Base is the relative "/api" prefix so the
-// same code works in dev (Vite proxies /api → :8001) and behind a single origin in prod.
-const BASE = "/api";
+// Local development uses Vite's /api proxy; production calls the Render API directly.
+const BASE = import.meta.env.PROD
+  ? "https://prontuai-system.onrender.com/api"
+  : "/api";
 
 export class ApiError extends Error {
   status;
