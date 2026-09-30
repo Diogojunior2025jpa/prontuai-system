@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 
 
 def new_id() -> str:
@@ -21,6 +21,12 @@ class LoginIn(BaseModel):
     password: str
 
 
+class AccountUpdateIn(BaseModel):
+    email: EmailStr
+    current_password: str = Field(min_length=8, max_length=128)
+    new_password: str = Field(min_length=12, max_length=128)
+
+
 class UserOut(BaseModel):
     id: str
     name: str
@@ -30,6 +36,7 @@ class UserOut(BaseModel):
     permissions: list[str] = []
     specialty: str | None = None
     active: bool = True
+    must_change_password: bool = False
 
 
 class MeOut(BaseModel):
@@ -78,6 +85,31 @@ class TenantOut(BaseModel):
 class TenantPatch(BaseModel):
     status: Literal["active", "blocked"] | None = None
     plan_id: str | None = None
+
+
+# ---------- global notices ----------
+class NoticeIn(BaseModel):
+    title: str = Field(min_length=3, max_length=120)
+    message: str = Field(min_length=5, max_length=2000)
+
+
+class NoticePatch(BaseModel):
+    active: bool
+
+
+class NoticeOut(BaseModel):
+    id: str
+    tenant_id: str | None = None
+    title: str
+    message: str
+    active: bool = True
+    created_by: str
+    created_at: datetime
+
+
+# ---------- provider API keys ----------
+class ApiKeyIn(BaseModel):
+    api_key: str = Field(min_length=8, max_length=512)
 
 
 # ---------- team ----------
@@ -131,6 +163,7 @@ class AppointmentOut(BaseModel):
     patient_name: str | None = None
     professional_id: str | None = None
     professional_name: str | None = None
+    availability_id: str | None = None
     date: str
     time: str
     reason: str = ""
@@ -144,6 +177,41 @@ class AppointmentPatch(BaseModel):
     price: float | None = None
 
 
+# ---------- professional availability ----------
+class AvailabilityIn(BaseModel):
+    date: str
+    times: list[str] = Field(min_length=1, max_length=32)
+    professional_id: str | None = None
+
+
+class AvailabilityOut(BaseModel):
+    id: str
+    tenant_id: str
+    professional_id: str
+    professional_name: str
+    date: str
+    time: str
+    status: Literal["available", "booked"] = "available"
+    appointment_id: str | None = None
+
+
+class AvailabilityCreateOut(BaseModel):
+    created: int
+    slots: list[AvailabilityOut]
+
+
+class PortalAvailabilityOut(BaseModel):
+    id: str
+    professional_name: str
+    date: str
+    time: str
+
+
+class PortalAvailabilityList(BaseModel):
+    managed: bool
+    slots: list[PortalAvailabilityOut]
+
+
 # ---------- records ----------
 class RecordIn(BaseModel):
     patient_id: str
@@ -152,10 +220,16 @@ class RecordIn(BaseModel):
     transcript: str = ""
 
 
+class RecordPatch(BaseModel):
+    fields: dict[str, Any] | None = None
+    transcript: str | None = None
+
+
 class RecordOut(BaseModel):
     id: str
     tenant_id: str
     patient_id: str
+    patient_name: str | None = None
     template: str
     fields: dict[str, Any] = {}
     transcript: str = ""
@@ -226,3 +300,4 @@ class PortalBookIn(BaseModel):
     date: str
     time: str
     reason: str = ""
+    availability_id: str | None = None

@@ -145,14 +145,14 @@ export default function Campaigns() {
         </Card>
       </div>
 
-      <div className="mt-6 rounded-lg border border-[#1F2937] bg-[#111827]">
+      <div className="mt-6 overflow-x-auto rounded-lg border border-[#1F2937] bg-[#111827]">
         <div className="px-5 pt-5">
           <h2 className="font-heading text-base font-semibold">Histórico de disparos</h2>
         </div>
         {campaigns.length === 0 ? (
           <p className="p-5 text-sm text-slate-500" data-testid="campaigns-empty">Nenhuma campanha disparada ainda.</p>
         ) : (
-          <Table data-testid="campaigns-history-table">
+          <Table className="min-w-[620px]" data-testid="campaigns-history-table">
             <TableHeader>
               <TableRow>
                 <TableHead>Campanha</TableHead>

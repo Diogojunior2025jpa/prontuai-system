@@ -1,0 +1,55 @@
+RELATORIO DE EXECUCAO - PRONTUAI SYSTEM
+Data: 2026-09-30
+
+1. CONFIGURACAO DO BACKEND E MONGODB
+- backend/lib/db.py e backend/seed.py carregam configuracoes de backend/.env.
+- MONGO_URL configurado para mongodb://127.0.0.1:27017 e DB_NAME para prontuai.
+- MongoDB 8.0 executado em container Docker com volume persistente prontuai_mongo_data.
+- A porta 27017 do Mongo foi publicada somente no loopback (127.0.0.1).
+- Conexao validada com ping bem-sucedido.
+
+2. FUNCIONALIDADES IMPLEMENTADAS
+- Gestao de laudos: visualizacao, copia persistida, impressao/PDF, exportacao DOC e edicao por profissionais de saude.
+- Edicao de pacientes para perfis com patients.edit; CPF duplicado continua bloqueado dentro da mesma clinica.
+- Disponibilidade: medicos publicam horarios; admins da clinica gerenciam a agenda dos profissionais.
+- Portal do Paciente lista e reserva horarios publicados. Cancelamentos e exclusoes liberam os slots correspondentes.
+- Clinicas sem escala publicada continuam podendo usar o agendamento manual existente.
+- Painel Super Admin com broadcast de manutencao, monitor de servicos e resumo global Gemini baseado somente em metricas agregadas.
+- Chaves Groq e Gemini podem ser configuradas pelo Super Admin. Os valores sao cifrados no Mongo e nunca retornam ao navegador.
+- Se APP_SECRET_ENCRYPTION_KEY nao estiver configurada, o backend gera backend/.api_key_encryption.key com permissao 600; o arquivo esta no .gitignore.
+- Primeiro acesso do Super Admin exige atualizacao de e-mail e senha. A senha nova precisa ter pelo menos 12 caracteres.
+- Credenciais de demonstracao foram removidas da tela de login. Senhas nao foram gravadas neste relatorio.
+- Navegacao mobile, tabelas com rolagem interna e formularios ajustados para telas estreitas.
+
+3. BACKUP
+- Backup completo da arvore do projeto criado antes das edicoes das imagens.
+- Arquivo: /tmp/prontuai-system-pre-image-fixes-20260930-013702.tar.gz
+- Permissao do arquivo: 600.
+
+4. VALIDACOES
+- Backend: pytest -q concluiu com 6 testes aprovados.
+- Frontend: npm run build concluiu com sucesso; permanece aviso de bundle acima de 500 kB.
+- Lint: sem novos erros; permanece aviso existente de Fast Refresh em AppShell.jsx.
+- Health check http://127.0.0.1:8000/api/ retornou HTTP 200.
+- As 13 rotas da interface, incluindo /app/disponibilidade e /primeiro-acesso, retornaram HTTP 200.
+- Testado o ciclo de publicar horario, reservar pelo portal, cancelar e liberar o slot.
+- Testadas edicao de paciente, edicao de laudo pelo profissional e bloqueio de edicao para admin.
+- Testado agendamento no mesmo horario por profissionais diferentes para pacientes diferentes.
+- Chromium nao iniciou neste container por falta da biblioteca de sistema libatk-1.0.so.0; nao foi possivel validar o layout por screenshot.
+
+5. ACESSO E SEGURANCA
+Login: http://localhost:3000/login
+Painel Super Admin: http://localhost:3000/superadmin
+Disponibilidade da clinica: http://localhost:3000/app/disponibilidade
+Documentacao da API: http://localhost:8000/docs
+Health check: http://localhost:8000/api/
+
+- A tela de primeiro acesso permite definir o e-mail administrativo e uma senha nova.
+- As chaves API anteriormente compartilhadas nao foram reutilizadas. Revogue-as no provedor e configure chaves novas no painel.
+- O teste real com provedores externos depende de chaves validas Groq e Gemini salvas pelo Super Admin.
+- Nenhum segredo ou senha foi incluido no arquivo TXT.
+
+OBSERVACOES
+- API, frontend e MongoDB estavam respondendo ao final das verificacoes.
+- backend/.env contem configuracao local; nao exponha este Mongo sem autenticacao fora do ambiente de desenvolvimento.
+- backend/seed.py apaga e recria colecoes de demonstracao; nao execute para iniciar o sistema.

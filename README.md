@@ -70,7 +70,18 @@ FastAPI, async throughout. `python` is the app venv interpreter
   — `ObjectId` is not JSON-serializable and leaks into response bodies. Keep the
   `uuid4` default-factory pattern from `StatusCheck`.
 - **Config**: `backend/.env` — `MONGO_URL` (connection string), `DB_NAME`
-  (database name), `CORS_ORIGINS`. `server.py` loads it with `python-dotenv`
+  (database name), `CORS_ORIGINS`, `GROQ_API_KEY` (audio transcription and
+  clinical structuring), `GEMINI_API_KEY` (aggregate-only Super Admin reports),
+  optional `APP_SECRET_ENCRYPTION_KEY` (Fernet key used to encrypt keys saved
+  from the Super Admin panel), and optional `GEMINI_MODEL` (defaults to
+  `gemini-2.5-flash`). If no master key is configured, development creates one
+  in `backend/.api_key_encryption.key` with owner-only permissions. Back up
+  that file securely; losing it makes locally stored keys unrecoverable. In
+  production, provide `APP_SECRET_ENCRYPTION_KEY` through the deployment secret
+  manager and share it across backend instances.
+  Never commit API
+  keys or paste them into source code, logs, or chat. Revoke any key that has
+  been exposed and replace it locally in this file. `server.py` loads it with `python-dotenv`
   above its local imports, and `lib/db.py` self-loads it so standalone scripts
   inherit it too. The pod runs `mongod` locally, so `MONGO_URL` points at
   `localhost`. Add new secrets/config here; read them with `os.environ`.

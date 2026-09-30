@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const STATUS = {
   scheduled: { label: "Agendado", cls: "bg-[#312E81] text-indigo-300" },
@@ -24,7 +25,7 @@ export default function PatientPortal() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ date: "", time: "", reason: "" });
+  const [form, setForm] = useState({ date: "", time: "", reason: "", availability_id: "" });
 
   const { data: me, isError: meErr } = useQuery({
     queryKey: ["portal", "me"], queryFn: () => apiGet("/portal/me"), retry: false,
@@ -32,6 +33,15 @@ export default function PatientPortal() {
   const { data: appts, isError } = useQuery({
     queryKey: ["portal", "appointments"], queryFn: () => apiGet("/portal/appointments"), retry: false,
   });
+  const { data: availabilityData, isError: availabilityError } = useQuery({
+    queryKey: ["portal", "availability", form.date],
+    queryFn: () => apiGet(`/portal/availability?date=${encodeURIComponent(form.date)}`),
+    enabled: open && Boolean(form.date),
+    refetchInterval: 10_000,
+    retry: false,
+  });
+  const availability = availabilityData?.slots || [];
+  const usesAvailability = availabilityData?.managed ?? true;
 
   const list = isError ? [] : appts || [];
   const today = new Date().toISOString().slice(0, 10);
@@ -42,7 +52,7 @@ export default function PatientPortal() {
     mutationFn: (body) => apiPost("/portal/appointments", body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["portal", "appointments"] });
-      setForm({ date: "", time: "", reason: "" });
+      setForm({ date: "", time: "", reason: "", availability_id: "" });
       setOpen(false);
       toast.success("Consulta solicitada com sucesso");
     },
@@ -88,40 +98,74 @@ export default function PatientPortal() {
         </Button>
       </header>
 
-      <main className="p-6 max-w-3xl mx-auto space-y-6">
+      <main className="mx-auto max-w-3xl space-y-6 p-4 sm:p-6">
         {meErr ? (
           <p className="text-sm text-amber-400" data-testid="portal-session-warning">
             Sessão expirada. <a className="underline" href="/portal/login">Entrar novamente</a>.
           </p>
         ) : null}
 
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="font-heading text-2xl font-semibold tracking-tight">Minhas consultas</h1>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="font-heading text-xl font-semibold tracking-tight sm:text-2xl">Minhas consultas</h1>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger render={<Button size="sm" data-testid="book-new-appointment-btn" />}>
               <CalendarPlus className="size-4" /> Marcar consulta
             </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
+            <DialogContent className="max-h-[85dvh] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-md">
               <DialogHeader><DialogTitle className="font-heading">Marcar nova consulta</DialogTitle></DialogHeader>
               <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); book.mutate(form); }} data-testid="portal-booking-form">
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="b-date">Data</Label>
                     <Input
                       id="b-date" type="date" min={today} value={form.date}
-                      onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
+                      onChange={(e) => setForm((f) => ({ ...f, date: e.target.value, time: "", availability_id: "" }))}
                       required data-testid="appointment-date-picker"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="b-time">Horário</Label>
-                    <Input
-                      id="b-time" type="time" value={form.time}
-                      onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))}
-                      required data-testid="appointment-time-picker"
-                    />
+                    {usesAvailability ? (
+                      <>
+                        <Label>Horários disponíveis</Label>
+                        <Select
+                          value={form.availability_id}
+                          onValueChange={(availabilityId) => {
+                            const slot = availability.find((item) => item.id === availabilityId);
+                            setForm((current) => ({ ...current, availability_id: availabilityId, time: slot?.time || "" }));
+                          }}
+                          disabled={!form.date || availability.length === 0}
+                        >
+                          <SelectTrigger data-testid="appointment-time-picker">
+                            <SelectValue placeholder={availability.length ? "Selecione um horário" : "Sem horários nesta data"}>
+                              {(value) => {
+                                const slot = availability.find((item) => item.id === value);
+                                return slot ? `${slot.time} · ${slot.professional_name}` : "Selecione um horário";
+                              }}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availability.map((slot) => (
+                              <SelectItem key={slot.id} value={slot.id}>{slot.time} · {slot.professional_name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </>
+                    ) : (
+                      <>
+                        <Label htmlFor="b-time">Horário</Label>
+                        <Input
+                          id="b-time" type="time" value={form.time}
+                          onChange={(event) => setForm((current) => ({ ...current, time: event.target.value }))}
+                          required data-testid="appointment-time-picker"
+                        />
+                      </>
+                    )}
                   </div>
                 </div>
+                {availabilityError ? <p className="text-xs text-amber-400">Não foi possível consultar os horários.</p> : null}
+                {form.date && usesAvailability && !availabilityError && availability.length === 0 ? (
+                  <p className="text-xs text-slate-500" data-testid="portal-availability-empty">Nenhum horário disponível nessa data. Escolha outra data.</p>
+                ) : null}
                 <div className="space-y-1.5">
                   <Label htmlFor="b-reason">Motivo</Label>
                   <Input
@@ -131,7 +175,7 @@ export default function PatientPortal() {
                   />
                 </div>
                 <DialogFooter>
-                  <Button type="submit" disabled={book.isPending} data-testid="confirm-booking-btn">
+                  <Button type="submit" disabled={book.isPending || (usesAvailability ? !form.availability_id : !form.time)} data-testid="confirm-booking-btn">
                     {book.isPending ? "Enviando…" : "Confirmar consulta"}
                   </Button>
                 </DialogFooter>

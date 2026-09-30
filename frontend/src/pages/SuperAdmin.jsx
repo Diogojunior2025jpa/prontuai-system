@@ -1,10 +1,13 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, Ban, Building2, CheckCircle2, LogOut, Plus, TrendingUp, Users } from "lucide-react";
 import { toast } from "sonner";
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/lib/api";
 import AssistantWidget from "@/components/AssistantWidget";
+import GlobalAssistantPanel from "@/components/admin/GlobalAssistantPanel";
+import ApiKeySettingsPanel from "@/components/admin/ApiKeySettingsPanel";
+import GlobalNoticePanel from "@/components/admin/GlobalNoticePanel";
 import { useMe } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,7 +28,8 @@ const EMPTY_TENANT = { name: "", specialty: "geral", plan_id: "", admin_name: ""
 export default function SuperAdmin() {
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const { data: me } = useMe();
+  const { data: me, isLoading: meLoading, isError: meError } = useMe();
+  const canLoadAdmin = me?.user?.role === "super_admin" && !me.user.must_change_password;
 
   const [planForm, setPlanForm] = useState(EMPTY_PLAN);
   const [editingPlan, setEditingPlan] = useState(null);
@@ -35,12 +39,15 @@ export default function SuperAdmin() {
 
   const { data: overview, isError: ovErr } = useQuery({
     queryKey: ["admin", "overview"], queryFn: () => apiGet("/admin/overview"), retry: false,
+    enabled: canLoadAdmin,
   });
   const { data: plans } = useQuery({
     queryKey: ["admin", "plans"], queryFn: () => apiGet("/admin/plans"), retry: false,
+    enabled: canLoadAdmin,
   });
   const { data: tenants } = useQuery({
     queryKey: ["admin", "tenants"], queryFn: () => apiGet("/admin/tenants"), retry: false,
+    enabled: canLoadAdmin,
   });
 
   const planList = plans || [];
@@ -144,6 +151,10 @@ export default function SuperAdmin() {
     { label: "Pacientes na plataforma", value: overview?.patients_total ?? "—", icon: Users, cls: "text-cyan-400", testid: "metric-patients-platform" },
   ];
 
+  if (meLoading) return <main className="p-6 text-sm text-slate-400">Verificando acesso…</main>;
+  if (meError || !me?.user || me.user.role !== "super_admin") return <Navigate to="/login" replace />;
+  if (me.user.must_change_password) return <Navigate to="/primeiro-acesso" replace />;
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="h-16 flex items-center justify-between px-6 border-b border-[#1E293B] bg-[#070B11] sticky top-0 z-20">
@@ -243,11 +254,11 @@ export default function SuperAdmin() {
               </Dialog>
             </div>
 
-            <div className="rounded-lg border border-[#1F2937] bg-[#111827]">
+            <div className="overflow-x-auto rounded-lg border border-[#1F2937] bg-[#111827]">
               {tenantList.length === 0 ? (
                 <p className="p-6 text-sm text-slate-500" data-testid="tenants-empty">Nenhuma clínica cadastrada.</p>
               ) : (
-                <Table data-testid="superadmin-tenants-table">
+                <Table className="min-w-[860px]" data-testid="superadmin-tenants-table">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Clínica</TableHead>
@@ -400,6 +411,15 @@ export default function SuperAdmin() {
             </div>
           </TabsContent>
         </Tabs>
+
+        <section className="mt-8" aria-label="Chaves de integração">
+          <ApiKeySettingsPanel />
+        </section>
+
+        <section className="mt-5 grid gap-5 xl:grid-cols-2" aria-label="Ferramentas globais">
+          <GlobalNoticePanel />
+          <GlobalAssistantPanel />
+        </section>
       </main>
 
       <AssistantWidget />

@@ -151,6 +151,27 @@
     }
 }
 
+@media print {
+  @page { margin: 18mm; }
+  body * { visibility: hidden !important; }
+  .report-print-root,
+  .report-print-root * { visibility: visible !important; }
+  .report-print-root {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    color: #111827 !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+  }
+  .report-screen-controls { display: none !important; }
+}
+
 .overline {
   font-family: var(--font-mono);
   font-size: 11px;

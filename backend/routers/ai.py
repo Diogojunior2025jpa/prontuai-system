@@ -6,7 +6,8 @@ import logging
 import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
-from lib.auth import groq_key, require_perm
+from lib.api_keys import get_provider_key
+from lib.auth import require_perm
 from models.schemas import StructureIn, StructureOut
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -45,7 +46,10 @@ TEMPLATES = {
 
 async def _groq_post(path: str, **kwargs) -> dict:
     # Merge, never pass `headers` twice: callers may add their own Content-Type.
-    headers = {"Authorization": f"Bearer {groq_key()}", **kwargs.pop("headers", {})}
+    api_key = await get_provider_key("groq")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="GROQ_API_KEY não configurada")
+    headers = {"Authorization": f"Bearer {api_key}", **kwargs.pop("headers", {})}
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=10.0)) as c:
             r = await c.post(f"{GROQ}{path}", headers=headers, **kwargs)

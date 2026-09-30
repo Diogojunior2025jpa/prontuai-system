@@ -5,14 +5,17 @@ Voz:   ElevenLabs REST (httpx) — voz masculina grave "Adam" por padrão.
 """
 
 import base64
+import json
 import logging
 import os
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 
-from lib.auth import current_user, effective_permissions
+from lib.auth import current_user, effective_permissions, require_super_admin
 from lib.db import db
+from lib.gemini import generate_summary, gemini_model
+from lib.monitoring import system_snapshot
 from models.schemas import AskIn, AskOut, SpeakIn, SpeakOut
 from routers.ai import LLM_MODEL, _groq_post
 
@@ -195,6 +198,25 @@ async def ask(payload: AskIn, user: dict = Depends(current_user)):
     if not answer:
         raise HTTPException(status_code=502, detail="A IA não retornou resposta")
     return AskOut(answer=answer, model=LLM_MODEL)
+
+
+@router.post("/global-ask", response_model=AskOut)
+async def ask_global(payload: AskIn, user: dict = Depends(require_super_admin)):
+    question = payload.question.strip()[:1000]
+    if not question:
+        raise HTTPException(status_code=422, detail="Pergunta vazia")
+
+    snapshot = await system_snapshot()
+    instruction = (
+        "Você é o assistente de monitoramento da plataforma ProntuAI. Responda em português do Brasil. "
+        "Analise somente o snapshot agregado fornecido, destaque indisponibilidades e provedores sem "
+        "chave configurada e recomende verificações seguras. Não acesse nem solicite prontuários, nomes, "
+        "CPFs, e-mails, IDs, transcrições ou dados clínicos; não invente telemetria nem alegue corrigir "
+        "automaticamente o sistema. Métricas e saúde: "
+        f"{json.dumps(snapshot, ensure_ascii=False, default=str)}"
+    )
+    answer, model = await generate_summary(instruction, question)
+    return AskOut(answer=answer, model=model)
 
 
 @router.post("/speak", response_model=SpeakOut)

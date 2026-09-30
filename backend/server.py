@@ -13,6 +13,7 @@ load_dotenv(ROOT_DIR / '.env')
 
 from lib.db import client, ensure_indexes  # noqa: E402
 from routers.ai import router as ai_router  # noqa: E402
+from routers.availability import router as availability_router  # noqa: E402
 from routers.assistant import router as assistant_router  # noqa: E402
 from routers.auth import router as auth_router  # noqa: E402
 from routers.clinic import router as clinic_router  # noqa: E402
@@ -40,6 +41,7 @@ async def root():
 api_router.include_router(auth_router)
 api_router.include_router(admin_router)
 api_router.include_router(clinic_router)
+api_router.include_router(availability_router)
 api_router.include_router(ai_router)
 api_router.include_router(assistant_router)
 api_router.include_router(portal_router)

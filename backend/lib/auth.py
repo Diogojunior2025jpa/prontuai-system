@@ -82,6 +82,7 @@ def public_user(doc: dict) -> dict:
         "permissions": effective_permissions(doc),
         "specialty": doc.get("specialty"),
         "active": doc.get("active", True),
+        "must_change_password": doc["role"] == "super_admin" and not doc.get("password_updated_at"),
     }
 
 
@@ -115,6 +116,8 @@ async def current_user(request: Request) -> dict:
 async def require_super_admin(user: dict = Depends(current_user)) -> dict:
     if user["role"] != "super_admin":
         raise HTTPException(status_code=403, detail="Acesso restrito ao Super Admin")
+    if not user.get("password_updated_at"):
+        raise HTTPException(status_code=403, detail="Atualize seu e-mail e senha para continuar")
     return user
 
 

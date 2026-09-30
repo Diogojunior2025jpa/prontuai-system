@@ -8,13 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-const DEMO = [
-  { label: "Super Admin", email: "super@prontuai.com", password: "super123" },
-  { label: "Admin OdontoAlphaville", email: "admin@odonto.com", password: "clinica123" },
-  { label: "Dentista (permissões limitadas)", email: "dentista@odonto.com", password: "equipe123" },
-  { label: "Admin Oftalmo Centro", email: "admin@oftalmo.com", password: "clinica123" },
-];
-
 export default function Login() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
@@ -25,7 +18,7 @@ export default function Login() {
     mutationFn: (body) => apiPost("/auth/login", body),
     onSuccess: (data) => {
       beginSession();
-      navigate(data.user.role === "super_admin" ? "/superadmin" : "/app", { replace: true });
+      navigate(data.user.must_change_password ? "/primeiro-acesso" : data.user.role === "super_admin" ? "/superadmin" : "/app", { replace: true });
     },
     onError: (err) => setError(err?.body?.detail || "Não foi possível entrar"),
   });
@@ -102,24 +95,6 @@ export default function Login() {
               {login.isPending ? "Entrando…" : "Entrar"}
             </Button>
           </form>
-
-          <div className="mt-8 rounded-lg border border-[#1F2937] bg-[#111827] p-4">
-            <p className="overline text-slate-500">Contas de demonstração</p>
-            <div className="mt-3 space-y-1.5">
-              {DEMO.map((d) => (
-                <button
-                  key={d.email}
-                  type="button"
-                  onClick={() => { setEmail(d.email); setPassword(d.password); }}
-                  className="w-full text-left text-xs rounded px-2 py-1.5 text-slate-400 hover:bg-[#161F30] hover:text-slate-100 transition-colors duration-150"
-                  data-testid={`demo-account-${d.email.split("@")[0]}`}
-                >
-                  <span className="font-medium text-slate-300">{d.label}</span>
-                  <span className="block font-mono text-[11px] text-slate-500">{d.email} · {d.password}</span>
-                </button>
-              ))}
-            </div>
-          </div>
 
           <p className="mt-6 text-xs text-slate-500 text-center">
             É paciente?{" "}

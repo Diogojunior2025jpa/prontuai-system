@@ -32,6 +32,8 @@ dist
 
 *token.json*
 *credentials.json*
+backend/.api_key_encryption.key
+backend/.api_key_encryption.lock
 
 # Logs and debug files
 npm-debug.log*

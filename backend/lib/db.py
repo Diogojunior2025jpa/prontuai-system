@@ -49,6 +49,19 @@ INDEXES: dict[str, list[IndexModel]] = {
         IndexModel([("id", ASCENDING)], name="id", unique=True),
         IndexModel([("tenant_id", ASCENDING), ("created_at", DESCENDING)], name="tenant_created"),
     ],
+    "notices": [
+        IndexModel([("id", ASCENDING)], name="id", unique=True),
+        IndexModel([("tenant_id", ASCENDING), ("active", ASCENDING), ("created_at", DESCENDING)], name="tenant_active_created"),
+    ],
+    "api_keys": [IndexModel([("provider", ASCENDING)], name="provider", unique=True)],
+    "availability": [
+        IndexModel(
+            [("tenant_id", ASCENDING), ("professional_id", ASCENDING), ("date", ASCENDING), ("time", ASCENDING)],
+            name="tenant_professional_date_time",
+            unique=True,
+        ),
+        IndexModel([("tenant_id", ASCENDING), ("status", ASCENDING), ("date", ASCENDING)], name="tenant_status_date"),
+    ],
 }
 
 

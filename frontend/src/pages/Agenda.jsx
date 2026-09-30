@@ -25,6 +25,7 @@ export default function Agenda() {
   const qc = useQueryClient();
   const { data: me } = useMe();
   const canEdit = hasPerm(me?.user, "agenda.edit");
+  const isClinicAdmin = me?.user?.role === "clinic_admin";
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ patient_id: "", date: "", time: "", reason: "" });
 
@@ -38,10 +39,20 @@ export default function Agenda() {
     queryFn: () => apiGet("/clinic/patients"),
     retry: false,
   });
+  const { data: team = [] } = useQuery({
+    queryKey: ["team"],
+    queryFn: () => apiGet("/clinic/team"),
+    enabled: isClinicAdmin,
+    retry: false,
+  });
 
   const list = isError ? [] : appts || [];
   const patientList = patients || [];
+  const professionals = team.filter((member) => member.role === "professional" && member.active);
   const patientLabels = Object.fromEntries(patientList.map((p) => [p.id, p.name]));
+  const selectedProfessionalId = me?.user?.role === "professional"
+    ? me.user.id
+    : form.professional_id || professionals[0]?.id || "";
 
   const create = useMutation({
     mutationFn: (body) => apiPost("/clinic/appointments", body),
@@ -81,7 +92,7 @@ export default function Agenda() {
               </DialogHeader>
               <form
                 className="space-y-3"
-                onSubmit={(e) => { e.preventDefault(); create.mutate(form); }}
+                onSubmit={(e) => { e.preventDefault(); create.mutate({ ...form, professional_id: selectedProfessionalId || null }); }}
                 data-testid="appointment-form"
               >
                 <div className="space-y-1.5">
@@ -104,6 +115,20 @@ export default function Agenda() {
                     </SelectContent>
                   </Select>
                 </div>
+                {isClinicAdmin ? (
+                  <div className="space-y-1.5">
+                    <Label>Profissional</Label>
+                    <Select value={selectedProfessionalId} onValueChange={(value) => setForm((current) => ({ ...current, professional_id: value }))}>
+                      <SelectTrigger data-testid="appointment-professional-select">
+                        <SelectValue placeholder="Selecione o profissional">{(value) => professionals.find((member) => member.id === value)?.name || "Selecione o profissional"}</SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {professionals.map((member) => <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    {professionals.length === 0 ? <p className="text-xs text-amber-400">Cadastre um profissional ativo em Equipe & Permissões.</p> : null}
+                  </div>
+                ) : null}
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label htmlFor="a-date">Data</Label>
@@ -131,7 +156,7 @@ export default function Agenda() {
                   />
                 </div>
                 <DialogFooter>
-                  <Button type="submit" disabled={create.isPending || !form.patient_id} data-testid="appointment-save-button">
+                  <Button type="submit" disabled={create.isPending || !form.patient_id || (isClinicAdmin && !selectedProfessionalId)} data-testid="appointment-save-button">
                     {create.isPending ? "Agendando…" : "Confirmar agendamento"}
                   </Button>
                 </DialogFooter>
@@ -141,13 +166,13 @@ export default function Agenda() {
         ) : null
       }
     >
-      <div className="rounded-lg border border-[#1F2937] bg-[#111827]">
+      <div className="overflow-x-auto rounded-lg border border-[#1F2937] bg-[#111827]">
         {list.length === 0 ? (
           <p className="p-6 text-sm text-slate-500" data-testid="appointments-empty">
             Nenhuma consulta na agenda.
           </p>
         ) : (
-          <Table data-testid="appointments-table">
+          <Table className="min-w-[760px]" data-testid="appointments-table">
             <TableHeader>
               <TableRow>
                 <TableHead>Data</TableHead>

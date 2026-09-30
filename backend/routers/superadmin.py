@@ -1,10 +1,13 @@
 from datetime import datetime, timezone
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from lib.auth import ROLE_DEFAULTS, hash_password, require_super_admin
 from lib.db import db
-from models.schemas import Plan, PlanIn, TenantIn, TenantOut, TenantPatch
+from lib.api_keys import provider_key_status, save_provider_key
+from lib.monitoring import system_snapshot
+from models.schemas import ApiKeyIn, NoticeIn, NoticeOut, NoticePatch, Plan, PlanIn, TenantIn, TenantOut, TenantPatch, new_id, utcnow
 
 router = APIRouter(prefix="/admin", tags=["super-admin"], dependencies=[Depends(require_super_admin)])
 
@@ -144,3 +147,52 @@ async def overview():
         "users_total": await db.users.count_documents({"role": {"$ne": "super_admin"}}),
         "by_plan": by_plan,
     }
+
+
+@router.get("/system-monitor")
+async def system_monitor():
+    return await system_snapshot()
+
+
+@router.get("/api-keys/status")
+async def api_keys_status():
+    return await provider_key_status()
+
+
+@router.put("/api-keys/{provider}")
+async def update_api_key(provider: Literal["groq", "gemini"], payload: ApiKeyIn):
+    return await save_provider_key(provider, payload.api_key)
+
+
+# ---------- global notices ----------
+@router.get("/notices", response_model=list[NoticeOut])
+async def list_notices():
+    docs = await db.notices.find({"tenant_id": None}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return [NoticeOut(**doc) for doc in docs]
+
+
+@router.post("/notices", response_model=NoticeOut, status_code=201)
+async def create_notice(payload: NoticeIn, user: dict = Depends(require_super_admin)):
+    notice = NoticeOut(
+        id=new_id(),
+        tenant_id=None,
+        **payload.model_dump(),
+        active=True,
+        created_by=user["name"],
+        created_at=utcnow(),
+    )
+    await db.notices.insert_one(notice.model_dump())
+    return notice
+
+
+@router.patch("/notices/{notice_id}", response_model=NoticeOut)
+async def patch_notice(notice_id: str, payload: NoticePatch):
+    notice = await db.notices.find_one_and_update(
+        {"id": notice_id, "tenant_id": None},
+        {"$set": payload.model_dump()},
+        return_document=True,
+        projection={"_id": 0},
+    )
+    if not notice:
+        raise HTTPException(status_code=404, detail="Aviso não encontrado")
+    return NoticeOut(**notice)

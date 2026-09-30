@@ -15,9 +15,11 @@ from models.schemas import (
     CampaignOut,
     MemberIn,
     MemberPatch,
+    NoticeOut,
     Patient,
     PatientIn,
     RecordIn,
+    RecordPatch,
     RecordOut,
     UserOut,
     new_id,
@@ -25,6 +27,17 @@ from models.schemas import (
 )
 
 router = APIRouter(prefix="/clinic", tags=["clinic"])
+
+
+@router.get("/notices", response_model=list[NoticeOut])
+async def list_global_notices(user: dict = Depends(require_tenant_user)):
+    if user.get("role") != "clinic_admin":
+        raise HTTPException(status_code=403, detail="Avisos globais são exclusivos para administradores da clínica")
+    docs = await db.notices.find(
+        {"active": True, "$or": [{"tenant_id": None}, {"tenant_id": user["tenant_id"]}]},
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(50)
+    return [NoticeOut(**doc) for doc in docs]
 
 
 @router.get("/permissions")
@@ -87,6 +100,11 @@ async def get_patient(patient_id: str, user: dict = Depends(require_perm("patien
 
 @router.put("/patients/{patient_id}", response_model=Patient)
 async def update_patient(patient_id: str, payload: PatientIn, user: dict = Depends(require_perm("patients.edit"))):
+    duplicate = await db.patients.find_one(
+        tenant_filter(user, {"cpf": payload.cpf, "id": {"$ne": patient_id}}), {"_id": 0, "id": 1}
+    )
+    if duplicate:
+        raise HTTPException(status_code=409, detail="CPF já cadastrado nesta clínica")
     doc = await db.patients.find_one_and_update(
         tenant_filter(user, {"id": patient_id}),
         {"$set": payload.model_dump()},
@@ -100,6 +118,15 @@ async def update_patient(patient_id: str, payload: PatientIn, user: dict = Depen
 
 @router.delete("/patients/{patient_id}")
 async def delete_patient(patient_id: str, user: dict = Depends(require_perm("patients.edit"))):
+    appointments = await db.appointments.find(
+        tenant_filter(user, {"patient_id": patient_id}), {"_id": 0, "id": 1, "availability_id": 1}
+    ).to_list(1000)
+    availability_ids = [appointment["availability_id"] for appointment in appointments if appointment.get("availability_id")]
+    if availability_ids:
+        await db.availability.update_many(
+            tenant_filter(user, {"id": {"$in": availability_ids}, "status": "booked"}),
+            {"$set": {"status": "available"}, "$unset": {"appointment_id": ""}},
+        )
     res = await db.patients.delete_one(tenant_filter(user, {"id": patient_id}))
     if not res.deleted_count:
         raise HTTPException(status_code=404, detail="Paciente não encontrado")
@@ -137,15 +164,69 @@ async def list_appointments(date: str | None = None, user: dict = Depends(requir
 async def create_appointment(payload: AppointmentIn, user: dict = Depends(require_perm("agenda.edit"))):
     if not await db.patients.find_one(tenant_filter(user, {"id": payload.patient_id})):
         raise HTTPException(status_code=404, detail="Paciente não encontrado nesta clínica")
+    professional_id = user["id"] if user.get("role") == "professional" else payload.professional_id
+    if professional_id:
+        professional = await db.users.find_one(
+            {"id": professional_id, "tenant_id": user["tenant_id"], "role": "professional", "active": True},
+            {"_id": 0, "id": 1},
+        )
+        if not professional:
+            raise HTTPException(status_code=404, detail="Profissional não encontrado nesta clínica")
+
+    appointment_id = new_id()
+    slot = None
+    slot_query = tenant_filter(user, {"date": payload.date, "time": payload.time, "status": "available"})
+    if professional_id:
+        slot_query["professional_id"] = professional_id
+    else:
+        available_slots = await db.availability.find(slot_query, {"_id": 0}).to_list(2)
+        if len(available_slots) > 1:
+            raise HTTPException(status_code=422, detail="Selecione o profissional para este horário")
+        if available_slots:
+            slot_query["professional_id"] = available_slots[0]["professional_id"]
+            professional_id = available_slots[0]["professional_id"]
+
+    conflict_filter = {"date": payload.date, "time": payload.time, "status": "scheduled"}
+    if professional_id:
+        conflict_filter["$or"] = [
+            {"professional_id": professional_id},
+            {"patient_id": payload.patient_id},
+        ]
+    conflict = await db.appointments.find_one(tenant_filter(user, conflict_filter), {"_id": 0, "id": 1})
+    if conflict:
+        raise HTTPException(status_code=409, detail="Horário já ocupado para este profissional")
+
+    if professional_id:
+        available_slot = await db.availability.find_one(slot_query, {"_id": 0, "id": 1})
+        if available_slot:
+            slot = await db.availability.find_one_and_update(
+                slot_query,
+                {"$set": {"status": "booked", "appointment_id": appointment_id}},
+                return_document=True,
+                projection={"_id": 0},
+            )
+            if not slot:
+                raise HTTPException(status_code=409, detail="Este horário acabou de ser reservado")
+
     doc = {
-        "id": new_id(),
+        "id": appointment_id,
         "tenant_id": user["tenant_id"],
         **payload.model_dump(),
+        "professional_id": professional_id,
+        "availability_id": slot.get("id") if slot else None,
         "status": "scheduled",
         "price": 0,
         "created_at": utcnow(),
     }
-    await db.appointments.insert_one(dict(doc))
+    try:
+        await db.appointments.insert_one(dict(doc))
+    except Exception:
+        if slot:
+            await db.availability.update_one(
+                {"id": slot["id"], "appointment_id": appointment_id},
+                {"$set": {"status": "available"}, "$unset": {"appointment_id": ""}},
+            )
+        raise
     return (await _decorate([doc], user))[0]
 
 
@@ -154,11 +235,19 @@ async def patch_appointment(appointment_id: str, payload: AppointmentPatch, user
     update = {k: v for k, v in payload.model_dump().items() if v is not None}
     if not update:
         raise HTTPException(status_code=422, detail="Nada para atualizar")
+    previous = await db.appointments.find_one(tenant_filter(user, {"id": appointment_id}), {"_id": 0})
+    if not previous:
+        raise HTTPException(status_code=404, detail="Agendamento não encontrado")
     doc = await db.appointments.find_one_and_update(
         tenant_filter(user, {"id": appointment_id}), {"$set": update}, return_document=True, projection={"_id": 0}
     )
     if not doc:
         raise HTTPException(status_code=404, detail="Agendamento não encontrado")
+    if update.get("status") == "cancelled" and previous.get("availability_id"):
+        await db.availability.update_one(
+            {"id": previous["availability_id"], "tenant_id": user["tenant_id"], "appointment_id": appointment_id},
+            {"$set": {"status": "available"}, "$unset": {"appointment_id": ""}},
+        )
     return (await _decorate([doc], user))[0]
 
 
@@ -167,18 +256,29 @@ async def patch_appointment(appointment_id: str, payload: AppointmentPatch, user
 async def list_records(patient_id: str | None = None, user: dict = Depends(require_perm("records.view"))):
     flt = tenant_filter(user, {"patient_id": patient_id} if patient_id else None)
     docs = await db.records.find(flt, {"_id": 0}).sort("created_at", -1).to_list(500)
+    patient_names = {
+        p["id"]: p["name"]
+        for p in await db.patients.find(
+            tenant_filter(user, {"id": {"$in": [d["patient_id"] for d in docs]}}),
+            {"_id": 0, "id": 1, "name": 1},
+        ).to_list(500)
+    }
     authors = {
         u["id"]: u["name"]
         for u in await db.users.find({"tenant_id": user["tenant_id"]}, {"_id": 0, "id": 1, "name": 1}).to_list(500)
     }
     for d in docs:
         d["author_name"] = authors.get(d.get("author_id"))
+        d["patient_name"] = patient_names.get(d["patient_id"])
     return [RecordOut(**d) for d in docs]
 
 
 @router.post("/records", response_model=RecordOut, status_code=201)
 async def create_record(payload: RecordIn, user: dict = Depends(require_perm("records.edit"))):
-    if not await db.patients.find_one(tenant_filter(user, {"id": payload.patient_id})):
+    patient = await db.patients.find_one(
+        tenant_filter(user, {"id": payload.patient_id}), {"_id": 0, "name": 1}
+    )
+    if not patient:
         raise HTTPException(status_code=404, detail="Paciente não encontrado nesta clínica")
     doc = {
         "id": new_id(),
@@ -189,7 +289,34 @@ async def create_record(payload: RecordIn, user: dict = Depends(require_perm("re
     }
     await db.records.insert_one(dict(doc))
     doc["author_name"] = user["name"]
+    doc["patient_name"] = patient["name"]
     return RecordOut(**doc)
+
+
+@router.patch("/records/{record_id}", response_model=RecordOut)
+async def update_record(record_id: str, payload: RecordPatch, user: dict = Depends(require_perm("records.edit"))):
+    if user.get("role") != "professional":
+        raise HTTPException(status_code=403, detail="Somente profissionais de saúde podem editar laudos existentes")
+    update = payload.model_dump(exclude_unset=True)
+    if not update:
+        raise HTTPException(status_code=422, detail="Nenhuma alteração informada")
+    record = await db.records.find_one_and_update(
+        tenant_filter(user, {"id": record_id}),
+        {"$set": update},
+        return_document=True,
+        projection={"_id": 0},
+    )
+    if not record:
+        raise HTTPException(status_code=404, detail="Laudo não encontrado")
+    patient = await db.patients.find_one(
+        tenant_filter(user, {"id": record["patient_id"]}), {"_id": 0, "name": 1}
+    )
+    record["patient_name"] = patient["name"] if patient else None
+    author = await db.users.find_one(
+        {"id": record.get("author_id"), "tenant_id": user["tenant_id"]}, {"_id": 0, "name": 1}
+    )
+    record["author_name"] = author["name"] if author else None
+    return RecordOut(**record)
 
 
 # ---------- team / RBAC ----------
