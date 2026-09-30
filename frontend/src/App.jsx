@@ -2,6 +2,9 @@ import { Routes, Route } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import Home from "@/pages/Home";
 import Login from "@/pages/Login";
+import Register from "@/pages/Register";
+import ForgotPassword from "@/pages/ForgotPassword";
+import SubscriptionPlans from "@/pages/SubscriptionPlans";
 import FirstAccess from "@/pages/FirstAccess";
 import Dashboard from "@/pages/Dashboard";
 import Patients from "@/pages/Patients";
@@ -22,8 +25,11 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/cadastro" element={<Register />} />
+        <Route path="/esqueci-senha" element={<ForgotPassword />} />
         <Route path="/primeiro-acesso" element={<FirstAccess />} />
         <Route path="/app" element={<Dashboard />} />
+        <Route path="/app/plano" element={<SubscriptionPlans />} />
         <Route path="/app/pacientes" element={<Patients />} />
         <Route path="/app/agenda" element={<Agenda />} />
         <Route path="/app/disponibilidade" element={<Availability />} />

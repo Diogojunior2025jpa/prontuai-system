@@ -85,6 +85,18 @@ FastAPI, async throughout. `python` is the app venv interpreter
   above its local imports, and `lib/db.py` self-loads it so standalone scripts
   inherit it too. The pod runs `mongod` locally, so `MONGO_URL` points at
   `localhost`. Add new secrets/config here; read them with `os.environ`.
+  Password recovery also requires `SMTP_HOST`, `SMTP_FROM`, and `SMTP_PORT`
+  (default `587`); configure `SMTP_USERNAME` and `SMTP_PASSWORD` when the mail
+  provider requires authentication, and set `SMTP_STARTTLS=true` (default) or
+  `SMTP_USE_SSL=true` for port `465`. Set `FRONTEND_URL` to the public Vercel
+  origin so recovery links return to the deployed app. These values belong in
+  Render's secret environment settings, never in the repository. Until SMTP is
+  configured, the recovery endpoint returns `503` and does not claim that an
+  email was sent.
+  Public clinic registration creates a seven-day trial on the least expensive
+  active plan. Plan selection after expiry is recorded as `pending_payment`;
+  no Pix charge is created or marked paid because a payment provider has not
+  been configured.
 - **Dates**: `backend/lib/dates.py` — `today_iso(tz=None)`. The pod clock is
   UTC; anchor "today" server-side with this, never with client-side date math.
 - **Interactive check**: `cd /app/backend && python -c 'import server'` catches

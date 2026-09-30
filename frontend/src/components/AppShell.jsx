@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Activity, Bell, Calendar, FileText, LayoutDashboard, LogOut, Megaphone, ShieldCheck, Stethoscope, Users, UsersRound,
+  Activity, Bell, Calendar, CreditCard, FileText, LayoutDashboard, LogOut, Megaphone, ShieldCheck, Stethoscope, Users, UsersRound,
 } from "lucide-react";
 import { apiGet } from "@/lib/api";
 import AssistantWidget from "@/components/AssistantWidget";
@@ -27,6 +27,7 @@ const NAV = [
   { to: "/app/laudos", label: "Laudos Médicos", icon: FileText, perm: "records.view" },
   { to: "/app/equipe", label: "Equipe & Permissões", icon: UsersRound, perm: "team.manage" },
   { to: "/app/campanhas", label: "Marketing", icon: Megaphone, perm: "campaigns.send" },
+  { to: "/app/plano", label: "Plano", icon: CreditCard, perm: null, roles: ["clinic_admin"] },
 ];
 
 export default function AppShell({ children, title, subtitle, actions }) {

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useLocation, useNavigate, Link } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { Activity, Lock, ShieldCheck } from "lucide-react";
 import { apiPost } from "@/lib/api";
@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export default function Login() {
+  const location = useLocation();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -82,6 +83,10 @@ export default function Login() {
                 required
               />
             </div>
+            <div className="flex justify-end">
+              <Link to="/esqueci-senha" className="text-xs text-cyan-400 hover:underline" data-testid="forgot-password-link">Esqueci minha senha</Link>
+            </div>
+            {location.state?.message ? <p className="text-sm text-emerald-300" role="status">{location.state.message}</p> : null}
             {error ? (
               <p className="text-sm text-red-400" data-testid="login-error">{error}</p>
             ) : null}
@@ -101,6 +106,10 @@ export default function Login() {
             <Link to="/portal/login" className="text-cyan-400 hover:underline" data-testid="portal-login-link">
               Acessar o Portal do Paciente
             </Link>
+          </p>
+          <p className="mt-4 text-center text-sm text-slate-400">
+            Sua clínica ainda não tem acesso?{" "}
+            <Link to="/cadastro" className="font-medium text-cyan-400 hover:underline" data-testid="register-link">Cadastre-se</Link>
           </p>
         </div>
       </div>

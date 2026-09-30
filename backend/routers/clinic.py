@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from lib.auth import PERMISSIONS, ROLE_DEFAULTS, effective_permissions, hash_password, public_user, require_perm, require_tenant_user, tenant_filter
+from lib.auth import PERMISSIONS, ROLE_DEFAULTS, current_user, effective_permissions, hash_password, public_user, require_perm, require_tenant_user, tenant_filter
 from lib.dates import today_iso
 from lib.db import db
 from models.schemas import (
@@ -21,12 +21,65 @@ from models.schemas import (
     RecordIn,
     RecordPatch,
     RecordOut,
+    SelectPlanIn,
     UserOut,
     new_id,
     utcnow,
 )
 
 router = APIRouter(prefix="/clinic", tags=["clinic"])
+
+
+@router.get("/subscription")
+async def get_subscription(user: dict = Depends(current_user)):
+    if user.get("role") != "clinic_admin" or not user.get("tenant_id"):
+        raise HTTPException(status_code=403, detail="Somente o administrador da clínica pode gerenciar o plano")
+    tenant = await db.tenants.find_one({"id": user["tenant_id"]}, {"_id": 0})
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Clínica não encontrada")
+    plan = await db.plans.find_one({"id": tenant.get("plan_id")}, {"_id": 0}) if tenant.get("plan_id") else None
+    trial_ends_at = tenant.get("trial_ends_at")
+    subscription_status = tenant.get("subscription_status", "active")
+    if trial_ends_at and subscription_status != "active":
+        deadline = trial_ends_at if trial_ends_at.tzinfo else trial_ends_at.replace(tzinfo=timezone.utc)
+        if deadline <= datetime.now(timezone.utc):
+            subscription_status = "expired" if subscription_status == "trialing" else "pending_payment"
+    return {
+        "plan": plan,
+        "plan_id": tenant.get("plan_id"),
+        "subscription_status": subscription_status,
+        "trial_ends_at": trial_ends_at,
+    }
+
+
+@router.put("/subscription/plan")
+async def select_subscription_plan(payload: SelectPlanIn, user: dict = Depends(current_user)):
+    if user.get("role") != "clinic_admin" or not user.get("tenant_id"):
+        raise HTTPException(status_code=403, detail="Somente o administrador da clínica pode gerenciar o plano")
+    tenant = await db.tenants.find_one({"id": user["tenant_id"]}, {"_id": 0})
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Clínica não encontrada")
+    if tenant.get("subscription_status", "active") == "active":
+        raise HTTPException(status_code=409, detail="A alteração de planos pagos ainda não está disponível")
+    plan = await db.plans.find_one({"id": payload.plan_id, "active": True}, {"_id": 0})
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plano não encontrado")
+
+    trial_ends_at = tenant.get("trial_ends_at")
+    deadline = trial_ends_at
+    if deadline and deadline.tzinfo is None:
+        deadline = deadline.replace(tzinfo=timezone.utc)
+    trial_active = bool(deadline and deadline > datetime.now(timezone.utc))
+    subscription_status = "trialing" if trial_active else "pending_payment"
+    await db.tenants.update_one(
+        {"id": tenant["id"]},
+        {"$set": {
+            "plan_id": plan["id"],
+            "selected_plan_id": plan["id"],
+            "subscription_status": subscription_status,
+        }},
+    )
+    return {"plan": plan, "subscription_status": subscription_status, "trial_ends_at": trial_ends_at}
 
 
 @router.get("/notices", response_model=list[NoticeOut])

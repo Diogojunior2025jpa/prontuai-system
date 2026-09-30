@@ -61,6 +61,8 @@ async def _tenant_out(t: dict, plans: dict) -> TenantOut:
         users_count=await db.users.count_documents({"tenant_id": t["id"]}),
         patients_count=await db.patients.count_documents({"tenant_id": t["id"]}),
         created_at=t.get("created_at"),
+        subscription_status=t.get("subscription_status", "active"),
+        trial_ends_at=t.get("trial_ends_at"),
     )
 
 
@@ -112,6 +114,8 @@ async def patch_tenant(tenant_id: str, payload: TenantPatch):
     update = {k: v for k, v in payload.model_dump().items() if v is not None}
     if not update:
         raise HTTPException(status_code=422, detail="Nada para atualizar")
+    if update.get("subscription_status") == "active":
+        update["subscription_started_at"] = utcnow()
     t = await db.tenants.find_one_and_update(
         {"id": tenant_id}, {"$set": update}, return_document=True, projection={"_id": 0}
     )
@@ -127,7 +131,8 @@ async def overview():
     plans = {p["id"]: p for p in await db.plans.find({}, {"_id": 0}).to_list(200)}
     tenants = await db.tenants.find({}, {"_id": 0}).to_list(500)
     active = [t for t in tenants if t.get("status") == "active"]
-    mrr = sum(plans.get(t.get("plan_id"), {}).get("price", 0) for t in active)
+    paying = [t for t in active if t.get("subscription_status", "active") == "active"]
+    mrr = sum(plans.get(t.get("plan_id"), {}).get("price", 0) for t in paying)
     blocked = len(tenants) - len(active)
     by_plan = []
     for p in plans.values():
@@ -135,7 +140,7 @@ async def overview():
             {
                 "plan": p["name"],
                 "tenants": sum(1 for t in tenants if t.get("plan_id") == p["id"]),
-                "revenue": p["price"] * sum(1 for t in active if t.get("plan_id") == p["id"]),
+                "revenue": p["price"] * sum(1 for t in paying if t.get("plan_id") == p["id"]),
             }
         )
     return {

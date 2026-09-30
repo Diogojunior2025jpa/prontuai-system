@@ -266,6 +266,7 @@ export default function SuperAdmin() {
                       <TableHead>Plano</TableHead>
                       <TableHead>Usuários</TableHead>
                       <TableHead>Pacientes</TableHead>
+                      <TableHead>Assinatura</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="w-44" />
                     </TableRow>
@@ -293,6 +294,13 @@ export default function SuperAdmin() {
                         <TableCell className="font-mono text-xs text-slate-400">{t.users_count}</TableCell>
                         <TableCell className="font-mono text-xs text-slate-400">{t.patients_count}</TableCell>
                         <TableCell>
+                          {(() => {
+                            const expiredTrial = t.subscription_status === "trialing" && t.trial_ends_at && new Date(t.trial_ends_at) <= new Date();
+                            const label = expiredTrial ? "Trial expirado" : ({ trialing: "Teste grátis", pending_payment: "Pagamento pendente", active: "Ativa" }[t.subscription_status] || "Ativa");
+                            return <div><Badge variant="outline" className={expiredTrial || t.subscription_status === "pending_payment" ? "border-amber-900 text-amber-300" : "border-emerald-900 text-emerald-300"}>{label}</Badge>{t.subscription_status === "trialing" && t.trial_ends_at ? <p className="mt-1 text-[11px] text-slate-500">até {new Date(t.trial_ends_at).toLocaleDateString("pt-BR")}</p> : null}</div>;
+                          })()}
+                        </TableCell>
+                        <TableCell>
                           <Badge
                             className={t.status === "active" ? "bg-[#064E3B] text-emerald-400" : "bg-[#7F1D1D] text-red-400"}
                             data-testid={`tenant-status-${t.id}`}
@@ -301,14 +309,22 @@ export default function SuperAdmin() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <Button
-                            variant={t.status === "active" ? "outline" : "default"}
-                            size="sm"
-                            onClick={() => patchTenant.mutate({ id: t.id, body: { status: t.status === "active" ? "blocked" : "active" } })}
-                            data-testid={`tenant-lock-toggle-${t.id}`}
-                          >
-                            {t.status === "active" ? <><Ban className="size-3.5" /> Bloquear</> : <><CheckCircle2 className="size-3.5" /> Liberar</>}
-                          </Button>
+                          <div className="flex flex-wrap gap-2">
+                            {(t.subscription_status === "pending_payment" || (t.subscription_status === "trialing" && t.trial_ends_at && new Date(t.trial_ends_at) <= new Date())) ? <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => patchTenant.mutate({ id: t.id, body: { subscription_status: "active" } })}
+                              data-testid={`tenant-subscription-activate-${t.id}`}
+                            >Confirmar Pix</Button> : null}
+                            <Button
+                              variant={t.status === "active" ? "outline" : "default"}
+                              size="sm"
+                              onClick={() => patchTenant.mutate({ id: t.id, body: { status: t.status === "active" ? "blocked" : "active" } })}
+                              data-testid={`tenant-lock-toggle-${t.id}`}
+                            >
+                              {t.status === "active" ? <><Ban className="size-3.5" /> Bloquear</> : <><CheckCircle2 className="size-3.5" /> Liberar</>}
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}

@@ -46,6 +46,12 @@ def hash_password(password: str) -> str:
     return f"{salt}${digest}"
 
 
+def hash_password_bcrypt(password: str) -> str:
+    if len(password.encode("utf-8")) > 72:
+        raise ValueError("bcrypt passwords cannot exceed 72 bytes")
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
+
+
 def verify_password(password: str, stored: str) -> bool:
     if stored.startswith(("$2a$", "$2b$", "$2y$")):
         try:
@@ -132,6 +138,16 @@ async def require_tenant_user(user: dict = Depends(current_user)) -> dict:
     """A staff member bound to exactly one clinic. Super Admin has no clinic data."""
     if user["role"] == "super_admin" or not user.get("tenant_id"):
         raise HTTPException(status_code=403, detail="Rota exclusiva de usuários de clínica")
+    tenant = await db.tenants.find_one({"id": user["tenant_id"]}, {"_id": 0, "subscription_status": 1, "trial_ends_at": 1})
+    trial_ends_at = tenant.get("trial_ends_at") if tenant else None
+    if trial_ends_at and tenant.get("subscription_status") != "active":
+        if trial_ends_at.tzinfo is None:
+            trial_ends_at = trial_ends_at.replace(tzinfo=timezone.utc)
+        if trial_ends_at <= datetime.now(timezone.utc):
+            raise HTTPException(
+                status_code=402,
+                detail="Seu período de teste terminou. Escolha um plano para reativar o acesso.",
+            )
     return user
 
 

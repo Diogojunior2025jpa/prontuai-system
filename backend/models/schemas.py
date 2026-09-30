@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 def new_id() -> str:
@@ -15,10 +15,47 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _validate_bcrypt_password_bytes(value: str) -> str:
+    if len(value.encode("utf-8")) > 72:
+        raise ValueError("A senha deve ter no máximo 72 bytes em UTF-8")
+    return value
+
+
 # ---------- auth ----------
 class LoginIn(BaseModel):
     email: str
     password: str
+
+
+class RegisterIn(BaseModel):
+    clinic_name: str = Field(min_length=2, max_length=120)
+    name: str = Field(min_length=2, max_length=120)
+    specialty: Literal["geral", "odonto", "oftalmo"] = "geral"
+    email: EmailStr
+    password: str = Field(min_length=12, max_length=72)
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_bytes(cls, value: str) -> str:
+        return _validate_bcrypt_password_bytes(value)
+
+
+class ForgotPasswordIn(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordIn(BaseModel):
+    token: str = Field(min_length=32, max_length=256)
+    new_password: str = Field(min_length=12, max_length=72)
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_password_bytes(cls, value: str) -> str:
+        return _validate_bcrypt_password_bytes(value)
+
+
+class SelectPlanIn(BaseModel):
+    plan_id: str = Field(min_length=1, max_length=100)
 
 
 class AccountUpdateIn(BaseModel):
@@ -80,11 +117,14 @@ class TenantOut(BaseModel):
     users_count: int = 0
     patients_count: int = 0
     created_at: datetime | None = None
+    subscription_status: str | None = None
+    trial_ends_at: datetime | None = None
 
 
 class TenantPatch(BaseModel):
     status: Literal["active", "blocked"] | None = None
     plan_id: str | None = None
+    subscription_status: Literal["trialing", "pending_payment", "active"] | None = None
 
 
 # ---------- global notices ----------
