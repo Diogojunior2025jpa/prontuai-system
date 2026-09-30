@@ -1,7 +1,5 @@
-// Local development uses Vite's /api proxy; production calls the Render API directly.
-const BASE = import.meta.env.PROD
-  ? "https://prontuai-system.onrender.com/api"
-  : "/api";
+// Keep API requests on the frontend origin; Vite and Vercel proxy /api to the backend.
+const BASE = "/api";
 
 export class ApiError extends Error {
   status;
@@ -17,6 +15,7 @@ async function request(method, path, body) {
   // Auth rides the httpOnly session cookie automatically — never add auth headers here.
   const res = await fetch(`${BASE}${path}`, {
     method,
+    credentials: "include",
     headers:
       body === undefined
         ? undefined
@@ -38,7 +37,11 @@ async function request(method, path, body) {
 // Multipart upload (audio dictation) — never set Content-Type by hand, the
 // browser must supply the multipart boundary.
 export async function apiUpload(path, formData) {
-  const res = await fetch(`${BASE}${path}`, { method: "POST", body: formData });
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
   if (!res.ok) {
     const errBody = await res.json().catch(() => null);
     throw new ApiError(res.status, errBody);
