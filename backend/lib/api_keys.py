@@ -17,6 +17,11 @@ ENCRYPTION_KEY_FILE = Path(__file__).resolve().parents[1] / ".api_key_encryption
 def _cipher() -> Fernet:
     key = os.environ.get("APP_SECRET_ENCRYPTION_KEY", "").strip()
     if not key:
+        if os.environ.get("RENDER", "").lower() == "true" or os.environ.get("RENDER_SERVICE_ID"):
+            raise HTTPException(
+                status_code=503,
+                detail="Configure APP_SECRET_ENCRYPTION_KEY nos segredos do Render",
+            )
         lock_path = ENCRYPTION_KEY_FILE.with_suffix(".lock")
         lock_fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
         try:
@@ -52,11 +57,25 @@ def encryption_key_ready() -> bool:
 async def provider_key_status() -> dict:
     providers = {}
     for provider, env_name in PROVIDER_ENV.items():
-        stored = await db.api_keys.find_one({"provider": provider}, {"_id": 0, "updated_at": 1})
+        stored = await db.api_keys.find_one(
+            {"provider": provider}, {"_id": 0, "encrypted_value": 1, "updated_at": 1}
+        )
         environment_configured = bool(os.environ.get(env_name, "").strip())
+        vault_configured = False
+        if stored:
+            try:
+                _cipher().decrypt(stored["encrypted_value"].encode())
+                vault_configured = True
+            except (HTTPException, InvalidToken, KeyError):
+                pass
         providers[provider] = {
-            "configured": bool(stored) or environment_configured,
-            "source": "vault" if stored else "environment" if environment_configured else "missing",
+            "configured": vault_configured or environment_configured,
+            "source": (
+                "vault" if vault_configured else
+                "environment" if environment_configured else
+                "vault_unavailable" if stored else
+                "missing"
+            ),
         }
     return {"encryption_ready": encryption_key_ready(), "providers": providers}
 
@@ -68,7 +87,10 @@ async def get_provider_key(provider: str) -> str:
     if stored:
         try:
             return _cipher().decrypt(stored["encrypted_value"].encode()).decode()
-        except InvalidToken as exc:
+        except (HTTPException, InvalidToken, KeyError) as exc:
+            environment_key = os.environ.get(PROVIDER_ENV[provider], "").strip()
+            if environment_key:
+                return environment_key
             raise HTTPException(status_code=503, detail="Não foi possível descriptografar a chave salva") from exc
     return os.environ.get(PROVIDER_ENV[provider], "").strip()
 

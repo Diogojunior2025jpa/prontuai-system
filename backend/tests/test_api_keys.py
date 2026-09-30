@@ -2,6 +2,7 @@ import os
 
 import pytest
 from cryptography.fernet import Fernet
+from fastapi import HTTPException
 import lib.api_keys as api_keys
 
 
@@ -55,6 +56,8 @@ async def test_key_status_never_returns_secret_value(key_vault):
 
 async def test_local_encryption_key_is_generated_with_restricted_permissions(monkeypatch, key_vault):
     monkeypatch.delenv("APP_SECRET_ENCRYPTION_KEY")
+    monkeypatch.delenv("RENDER", raising=False)
+    monkeypatch.delenv("RENDER_SERVICE_ID", raising=False)
 
     status = await api_keys.save_provider_key("groq", "unit-test-key-never-use")
 
@@ -63,3 +66,21 @@ async def test_local_encryption_key_is_generated_with_restricted_permissions(mon
     assert key_file.exists()
     assert key_file.stat().st_mode & 0o777 == 0o600
     assert await api_keys.get_provider_key("groq")
+
+
+async def test_render_requires_a_stable_encryption_key(monkeypatch, key_vault):
+    monkeypatch.delenv("APP_SECRET_ENCRYPTION_KEY")
+    monkeypatch.setenv("RENDER", "true")
+
+    assert api_keys.encryption_key_ready() is False
+    with pytest.raises(HTTPException, match="APP_SECRET_ENCRYPTION_KEY"):
+        api_keys._cipher()
+
+
+async def test_unreadable_vault_is_not_reported_as_configured(monkeypatch, key_vault):
+    await api_keys.save_provider_key("gemini", "unit-test-gemini-key")
+    monkeypatch.setenv("APP_SECRET_ENCRYPTION_KEY", Fernet.generate_key().decode())
+
+    status = await api_keys.provider_key_status()
+
+    assert status["providers"]["gemini"] == {"configured": False, "source": "vault_unavailable"}

@@ -65,6 +65,8 @@ export default function ApiKeySettingsPanel() {
               ? "Configurada no cofre"
               : providerStatus?.source === "environment"
                 ? "Configurada no ambiente"
+                : providerStatus?.source === "vault_unavailable"
+                  ? "Cofre indisponível"
                 : "Não configurada";
             return (
               <form key={provider.id} className="space-y-3" onSubmit={(event) => submit(event, provider.id)}>

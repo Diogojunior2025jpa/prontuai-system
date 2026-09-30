@@ -72,9 +72,9 @@ FastAPI, async throughout. `python` is the app venv interpreter
 - **Config**: `backend/.env` — `MONGO_URL` (connection string), `DB_NAME`
   (database name), `CORS_ORIGINS`, `GROQ_API_KEY` (audio transcription and
   clinical structuring), `GEMINI_API_KEY` (aggregate-only Super Admin reports),
-  optional `APP_SECRET_ENCRYPTION_KEY` (Fernet key used to encrypt keys saved
+  `APP_SECRET_ENCRYPTION_KEY` (Fernet key used to encrypt keys saved
   from the Super Admin panel), and optional `GEMINI_MODEL` (defaults to
-  `gemini-2.5-flash`). If no master key is configured, development creates one
+  `gemini-2.5-flash`). In development only, if no master key is configured, the app creates one
   in `backend/.api_key_encryption.key` with owner-only permissions. Back up
   that file securely; losing it makes locally stored keys unrecoverable. In
   production, provide `APP_SECRET_ENCRYPTION_KEY` through the deployment secret
