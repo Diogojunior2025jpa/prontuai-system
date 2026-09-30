@@ -25,8 +25,17 @@ Data: 2026-09-30
 - Backup completo da arvore do projeto criado antes das edicoes das imagens.
 - Arquivo: /tmp/prontuai-system-pre-image-fixes-20260930-013702.tar.gz
 - Permissao do arquivo: 600.
+- Backup completo criado antes desta atualizacao do relatorio.
+- Arquivo: /tmp/prontuai-system-pre-report-update-20260930-024907.tar.gz
+- Permissao do arquivo: 600.
 
-4. VALIDACOES
+4. API DE PRODUCAO
+- frontend/src/lib/api.js usa https://prontuai-system.onrender.com/api quando o build esta em modo de producao.
+- Em desenvolvimento, a base continua relativa (/api) e usa o proxy local do Vite para http://localhost:8000.
+- npm run build executado em frontend apos a alteracao; compilacao concluida com sucesso.
+- URL do Render encontrada no bundle de producao gerado.
+
+5. VALIDACOES
 - Backend: pytest -q concluiu com 6 testes aprovados.
 - Frontend: npm run build concluiu com sucesso; permanece aviso de bundle acima de 500 kB.
 - Lint: sem novos erros; permanece aviso existente de Fast Refresh em AppShell.jsx.
@@ -37,7 +46,7 @@ Data: 2026-09-30
 - Testado agendamento no mesmo horario por profissionais diferentes para pacientes diferentes.
 - Chromium nao iniciou neste container por falta da biblioteca de sistema libatk-1.0.so.0; nao foi possivel validar o layout por screenshot.
 
-5. ACESSO E SEGURANCA
+6. ACESSO E SEGURANCA
 Login: http://localhost:3000/login
 Painel Super Admin: http://localhost:3000/superadmin
 Disponibilidade da clinica: http://localhost:3000/app/disponibilidade
@@ -53,3 +62,5 @@ OBSERVACOES
 - API, frontend e MongoDB estavam respondendo ao final das verificacoes.
 - backend/.env contem configuracao local; nao exponha este Mongo sem autenticacao fora do ambiente de desenvolvimento.
 - backend/seed.py apaga e recria colecoes de demonstracao; nao execute para iniciar o sistema.
+- Commit preventivo local: 91f13cf (Backup preventivo antes de fixar URL da API).
+- Commit da URL de producao: 6db0165 (Fix: fixa URL de producao da API direto no frontend), enviado para origin/main.

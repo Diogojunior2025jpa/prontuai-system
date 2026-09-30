@@ -10,6 +10,7 @@ import secrets
 import uuid
 from datetime import datetime, timezone
 
+import bcrypt
 from fastapi import Depends, HTTPException, Request, Response
 
 from lib.db import db
@@ -46,6 +47,12 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(password: str, stored: str) -> bool:
+    if stored.startswith(("$2a$", "$2b$", "$2y$")):
+        try:
+            return bcrypt.checkpw(password.encode(), stored.encode())
+        except (TypeError, ValueError):
+            return False
+
     try:
         salt, digest = stored.split("$", 1)
     except ValueError:

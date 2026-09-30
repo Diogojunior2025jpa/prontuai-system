@@ -1,7 +1,9 @@
+import bcrypt
 import pytest
 from fastapi import HTTPException
 
 import lib.auth as auth
+from create_admin import ADMIN_EMAIL, ensure_admin
 from models.schemas import AccountUpdateIn
 import routers.auth as auth_router
 
@@ -84,3 +86,39 @@ async def test_first_access_rejects_wrong_current_password(super_admin):
 
     assert error.value.status_code == 401
     assert database.users.user["email"] == "temporary@example.com"
+
+
+def test_verify_bcrypt_password():
+    password = "temporary-bcrypt-password"
+    password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+    assert auth.verify_password(password, password_hash)
+
+
+class MemoryAdminUsers:
+    def __init__(self):
+        self.documents = []
+        self.indexes = []
+
+    def find_one(self, query, projection=None):
+        return next((doc for doc in self.documents if doc["email"] == query["email"]), None)
+
+    def create_index(self, keys, **kwargs):
+        self.indexes.append((keys, kwargs))
+
+    def insert_one(self, document):
+        self.documents.append(dict(document))
+
+
+def test_admin_creation_is_bcrypt_hashed_and_idempotent():
+    users = MemoryAdminUsers()
+    password = "a-unique-admin-password"
+
+    assert ensure_admin(users, password) is True
+    assert ensure_admin(users, password) is False
+    assert len(users.documents) == 1
+
+    admin = users.documents[0]
+    assert admin["email"] == ADMIN_EMAIL
+    assert admin["role"] == "super_admin"
+    assert bcrypt.checkpw(password.encode(), admin["password_hash"].encode())
