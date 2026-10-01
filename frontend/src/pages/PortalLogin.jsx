@@ -59,13 +59,6 @@ export default function PortalLogin() {
           </Button>
         </form>
 
-        <div className="mt-8 rounded-lg border border-[#1F2937] bg-[#111827] p-4">
-          <p className="overline text-slate-500">Paciente de demonstração</p>
-          <button
-            type="button"
-            onClick={() => { setCpf("12345678900"); setBirthDate("1988-04-12"); }}
-            className="mt-2 w-full text-left text-xs text-slate-400 hover:text-slate-100 transition-colors duration-150"
-
         <p className="mt-6 text-xs text-slate-500 text-center">
           É da equipe da clínica?{" "}
           <Link to="/login" className="text-indigo-400 hover:underline" data-testid="staff-login-link">

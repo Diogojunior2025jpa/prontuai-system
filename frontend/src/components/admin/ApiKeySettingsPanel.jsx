@@ -50,12 +50,6 @@ export default function ApiKeySettingsPanel() {
           <p>O valor nunca é exibido novamente e é armazenado cifrado no MongoDB. Em produção, use HTTPS.</p>
         </div>
 
-        disabled={!keys[provider.id]?.trim() || save.isPending}
-          <p className="rounded-md border border-amber-800/70 bg-amber-950/20 p-3 text-sm text-amber-200" role="alert" data-testid="api-key-encryption-warning">
-            O armazenamento protegido está indisponível. Tente novamente ou contate o suporte.
-          </p>
-        ) : null}
-
         {isError ? <p className="text-sm text-amber-300" role="alert">Não foi possível carregar o status das chaves.</p> : null}
 
         <div className="grid gap-5 md:grid-cols-2">
