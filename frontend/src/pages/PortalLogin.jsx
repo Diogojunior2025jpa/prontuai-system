@@ -65,12 +65,6 @@ export default function PortalLogin() {
             type="button"
             onClick={() => { setCpf("12345678900"); setBirthDate("1988-04-12"); }}
             className="mt-2 w-full text-left text-xs text-slate-400 hover:text-slate-100 transition-colors duration-150"
-            data-testid="portal-demo-patient"
-          >
-            <span className="font-medium text-slate-300">Marcos Almeida</span>
-            <span className="block font-mono text-[11px] text-slate-500">CPF 12345678900 · 12/04/1988</span>
-          </button>
-        </div>
 
         <p className="mt-6 text-xs text-slate-500 text-center">
           É da equipe da clínica?{" "}

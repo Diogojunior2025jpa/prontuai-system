@@ -6,7 +6,7 @@ const FEATURES = [
   {
     icon: ShieldCheck,
     title: "Isolamento total por clínica",
-    body: "Cada consulta ao banco carrega o tenant_id do usuário logado. A Clínica X nunca enxerga um registro da Clínica Y.",
+    body: "Dados totalmente isolados e seguros entre diferentes clínicas, garantindo privacidade absoluta e conformidade.",
   },
   {
     icon: Mic,
@@ -31,7 +31,7 @@ const FEATURES = [
   {
     icon: Activity,
     title: "Painel do Super Admin",
-    body: "Planos editáveis, MRR global, troca de plano e bloqueio de clínicas inadimplentes em um clique.",
+    body: "Gerenciamento completo da equipe, controle de acessos, médicos e atendentes em um só lugar.",
   },
 ];
 

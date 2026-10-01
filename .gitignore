@@ -29,6 +29,8 @@ dist/
 dist
 
 # Environment files (comprehensive coverage)
+backend/.env
+gemini_cli.py
 
 *token.json*
 *credentials.json*

@@ -123,7 +123,7 @@ async def forgot_password(payload: ForgotPasswordIn):
             try:
                 await send_password_reset_email(email, token)
             except Exception as exc:
-                logger.warning("Password reset delivery failed: %s", type(exc).__name__)
+                logger.warning("Password reset delivery failed: %s: %s", type(exc).__name__, exc)
                 await db.password_resets.delete_one({"token_hash": token_hash})
 
     return {"message": "Se o e-mail estiver cadastrado, enviaremos instruções para redefinir a senha."}

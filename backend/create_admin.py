@@ -1,14 +1,16 @@
 """Create the initial Super Admin without replacing existing database data.
 
-Run from the backend directory with MONGO_URI, DB_NAME, and ADMIN_PASSWORD set.
+Run from the backend directory with MONGO_URL, DB_NAME, and ADMIN_PASSWORD set.
 """
 
 import os
 import sys
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
 import bcrypt
+from dotenv import load_dotenv
 from pymongo import ASCENDING, MongoClient
 from pymongo.collection import Collection
 from pymongo.errors import DuplicateKeyError
@@ -42,12 +44,13 @@ def ensure_admin(users: Collection, password: str) -> bool:
 
 
 def main() -> int:
-    mongo_uri = os.environ.get("MONGO_URI")
+    load_dotenv(Path(__file__).with_name(".env"))
+    mongo_uri = os.environ.get("MONGO_URL") or os.environ.get("MONGO_URI")
     database_name = os.environ.get("DB_NAME")
     password = os.environ.get("ADMIN_PASSWORD")
 
     if not mongo_uri or not database_name or not password:
-        print("Defina MONGO_URI, DB_NAME e ADMIN_PASSWORD no ambiente.", file=sys.stderr)
+        print("Defina MONGO_URL, DB_NAME e ADMIN_PASSWORD no ambiente.", file=sys.stderr)
         return 2
 
     password_bytes = password.encode()
