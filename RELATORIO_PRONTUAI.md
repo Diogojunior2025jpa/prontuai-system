@@ -69,8 +69,9 @@
 - Validação local: suíte completa do backend (**30 testes passaram**), lint e
   build do frontend passaram. O build continua mostrando o aviso já conhecido
   de bundle JavaScript acima de 500 kB.
-- Alterações enviadas para `origin/main`; confirmar nos painéis da Vercel e do
-  Render se os deploys automáticos foram concluídos.
+- Commit `3741ed3` enviado para `origin/main`. A conclusão dos deploys não foi
+  confirmada nesta sessão; conferir os painéis da Vercel e do Render antes de
+  testar a funcionalidade em produção.
 
 ## Sistemas e serviços usados
 
@@ -84,32 +85,34 @@
 
 ## Pendências para continuar amanhã
 
-1. **Cofre de chaves de IA:** confirmar no Render que
+1. **Deploy dos laudos:** conferir se Vercel e Render concluíram os deploys do
+   commit `3741ed3`. Depois, testar em produção a edição e o arquivamento de
+   um laudo, incluindo acesso com os papéis autorizados.
+2. **Cofre de chaves de IA:** confirmar no Render que
    `APP_SECRET_ENCRYPTION_KEY` está definido e estável; verificar no Super
    Admin se o cofre está disponível e se as integrações Groq/Gemini estão
    ativas. Se alguma credencial foi exposta anteriormente, revogá-la e criar
    outra. Nunca registrar chaves neste relatório.
-2. **MongoDB Atlas e bootstrap:** confirmar que o backend de produção conecta ao
+3. **MongoDB Atlas e bootstrap:** confirmar que o backend de produção conecta ao
    Atlas e validar o fluxo de criação/recuperação de acesso do administrador.
    A existência e conexão foram pendências de relatórios anteriores e não foram
    revalidadas nesta sessão.
-3. **Assinaturas e cobrança:** a seleção de plano após o período de teste fica
+4. **Assinaturas e cobrança:** a seleção de plano após o período de teste fica
    como `pending_payment`; não há provedor Pix/cartão conectado. Confirmar se
    isso faz parte do escopo da próxima publicação.
-4. **Recuperação de senha:** o envio foi confirmado. Em caso de futura falha,
+5. **Recuperação de senha:** o envio foi confirmado. Em caso de futura falha,
    verificar primeiro as execuções do Apps Script e os logs do Render. Manter
    a URL do Web App e o segredo fora do código, commits, capturas e conversas.
 
 ## Estado do repositório ao fechar
 
-- A implementação de laudos foi publicada em `origin/main` depois do commit
-  `2c74ba3`; confirmar a conclusão dos deploys automáticos.
+- A implementação de laudos foi publicada no commit `3741ed3`, sincronizado
+  com `origin/main`; deploy em produção ainda sem confirmação.
 - Foram alterados `backend/routers/clinic.py` e
   `frontend/src/pages/MedicalReports.jsx`; foi criado
   `backend/tests/test_medical_records.py`.
 - `relatorio_execucao.txt` possui alteração local anterior e foi preservado,
   sem inclusão nos commits desta sequência.
-- Este relatório foi atualizado no workspace; confirmar e incluir em commit
-  quando o histórico de acompanhamento for publicado.
+- Este relatório acompanha o estado publicado do repositório.
 - A configuração local `commit.gpgsign=false` evita falha por chave GPG ausente
   neste repositório; não altera commits anteriores.
