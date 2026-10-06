@@ -18,7 +18,7 @@ from lib.auth import (
     verify_password,
 )
 from lib.db import db
-from lib.mailer import email_is_configured, send_password_reset_email
+from lib.mailer import send_password_reset_email
 from models.schemas import (
     AccountUpdateIn,
     ForgotPasswordIn,
@@ -96,9 +96,6 @@ async def register(payload: RegisterIn, response: Response):
 
 @router.post("/forgot-password", status_code=status.HTTP_202_ACCEPTED)
 async def forgot_password(payload: ForgotPasswordIn):
-    if not email_is_configured():
-        raise HTTPException(status_code=503, detail="Recuperação temporariamente indisponível")
-
     email = str(payload.email).lower().strip()
     user = await db.users.find_one({"email": email, "active": {"$ne": False}}, {"_id": 0, "id": 1})
     if user:
@@ -121,7 +118,9 @@ async def forgot_password(payload: ForgotPasswordIn):
                 }
             )
             try:
-                await send_password_reset_email(email, token)
+                sent = await send_password_reset_email(email, token)
+                if not sent:
+                    await db.password_resets.delete_one({"token_hash": token_hash})
             except Exception as exc:
                 logger.warning("Password reset delivery failed: %s: %s", type(exc).__name__, exc)
                 await db.password_resets.delete_one({"token_hash": token_hash})

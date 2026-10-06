@@ -143,7 +143,6 @@ async def test_password_reset_token_is_single_use_and_invalidates_sessions(monke
 async def test_forgot_password_returns_same_message_for_unknown_email(monkeypatch):
     database = MemoryDatabase(users=MemoryCollection(), password_resets=MemoryCollection())
     monkeypatch.setattr(auth_router, "db", database)
-    monkeypatch.setattr(auth_router, "email_is_configured", lambda: True)
 
     async def send_email(*_args):
         raise AssertionError("No email should be sent for an unknown address")
