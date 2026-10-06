@@ -307,7 +307,10 @@ async def patch_appointment(appointment_id: str, payload: AppointmentPatch, user
 # ---------- medical records ----------
 @router.get("/records", response_model=list[RecordOut])
 async def list_records(patient_id: str | None = None, user: dict = Depends(require_perm("records.view"))):
-    flt = tenant_filter(user, {"patient_id": patient_id} if patient_id else None)
+    record_filter = {"archived_at": None}
+    if patient_id:
+        record_filter["patient_id"] = patient_id
+    flt = tenant_filter(user, record_filter)
     docs = await db.records.find(flt, {"_id": 0}).sort("created_at", -1).to_list(500)
     patient_names = {
         p["id"]: p["name"]
@@ -348,13 +351,15 @@ async def create_record(payload: RecordIn, user: dict = Depends(require_perm("re
 
 @router.patch("/records/{record_id}", response_model=RecordOut)
 async def update_record(record_id: str, payload: RecordPatch, user: dict = Depends(require_perm("records.edit"))):
-    if user.get("role") != "professional":
-        raise HTTPException(status_code=403, detail="Somente profissionais de saúde podem editar laudos existentes")
+    if user.get("role") not in {"professional", "clinic_admin"}:
+        raise HTTPException(status_code=403, detail="Somente profissionais e administradores podem editar laudos")
     update = payload.model_dump(exclude_unset=True)
     if not update:
         raise HTTPException(status_code=422, detail="Nenhuma alteração informada")
+    update["updated_at"] = utcnow()
+    update["updated_by"] = user["id"]
     record = await db.records.find_one_and_update(
-        tenant_filter(user, {"id": record_id}),
+        tenant_filter(user, {"id": record_id, "archived_at": None}),
         {"$set": update},
         return_document=True,
         projection={"_id": 0},
@@ -370,6 +375,18 @@ async def update_record(record_id: str, payload: RecordPatch, user: dict = Depen
     )
     record["author_name"] = author["name"] if author else None
     return RecordOut(**record)
+
+
+@router.delete("/records/{record_id}", status_code=204)
+async def archive_record(record_id: str, user: dict = Depends(require_perm("records.edit"))):
+    if user.get("role") not in {"professional", "clinic_admin"}:
+        raise HTTPException(status_code=403, detail="Somente profissionais e administradores podem excluir laudos")
+    result = await db.records.update_one(
+        tenant_filter(user, {"id": record_id, "archived_at": None}),
+        {"$set": {"archived_at": utcnow(), "archived_by": user["id"]}},
+    )
+    if not result.matched_count:
+        raise HTTPException(status_code=404, detail="Laudo não encontrado")
 
 
 # ---------- team / RBAC ----------

@@ -1,15 +1,15 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Download, Pencil, Printer, Save } from "lucide-react";
+import { Copy, Download, Pencil, Printer, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import AppShell, { useMe } from "@/components/AppShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { apiGet, apiPatch, apiPost } from "@/lib/api";
+import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
 import { hasPerm, ptDate } from "@/lib/session";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -37,7 +37,8 @@ export default function MedicalReports() {
   const [editOpen, setEditOpen] = useState(false);
   const [editFields, setEditFields] = useState({});
   const [editTranscript, setEditTranscript] = useState("");
-  const canEditReport = canEdit && me?.user?.role === "professional";
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const canManageReports = canEdit && ["professional", "clinic_admin"].includes(me?.user?.role);
 
   const { data: allRecords = [], isError } = useQuery({
     queryKey: ["records"],
@@ -95,12 +96,25 @@ export default function MedicalReports() {
     onError: (error) => toast.error(error?.body?.detail || error.message || "Falha ao atualizar laudo"),
   });
 
-  function openEditor() {
-    setEditFields(Object.fromEntries(Object.entries(selectedRecord.fields || {}).map(([key, value]) => [
+  const deleteReport = useMutation({
+    mutationFn: (record) => apiDelete(`/clinic/records/${record.id}`),
+    onSuccess: (_result, record) => {
+      queryClient.invalidateQueries({ queryKey: ["records"] });
+      if (record.id === recordId) setRecordId("");
+      setDeleteTarget(null);
+      toast.success("Laudo removido da lista");
+    },
+    onError: (error) => toast.error(error?.body?.detail || "Não foi possível excluir o laudo"),
+  });
+
+  function openEditor(record = selectedRecord) {
+    if (!record) return;
+    setRecordId(record.id);
+    setEditFields(Object.fromEntries(Object.entries(record.fields || {}).map(([key, value]) => [
       key,
       value && typeof value === "object" ? JSON.stringify(value, null, 2) : String(value ?? ""),
     ])));
-    setEditTranscript(selectedRecord.transcript || "");
+    setEditTranscript(record.transcript || "");
     setEditOpen(true);
   }
 
@@ -143,20 +157,35 @@ export default function MedicalReports() {
             {records.length === 0 ? (
               <p className="py-5 text-sm text-slate-500" data-testid="reports-empty">Nenhum laudo encontrado.</p>
             ) : records.map((record) => (
-              <button
+              <div
                 key={record.id}
-                type="button"
-                onClick={() => setRecordId(record.id)}
-                className={`w-full rounded-md border p-3 text-left transition-colors ${selectedRecord?.id === record.id ? "border-teal-700 bg-teal-950/30" : "border-[#1F2937] hover:bg-[#172033]"}`}
+                className={`rounded-md border p-3 transition-colors ${selectedRecord?.id === record.id ? "border-teal-700 bg-teal-950/30" : "border-[#1F2937] hover:bg-[#172033]"}`}
                 data-testid={`report-item-${record.id}`}
               >
-                <div className="flex items-center justify-between gap-2">
-                  <Badge variant="outline" className="border-teal-900 text-teal-300">{TEMPLATE_LABELS[record.template] || record.template}</Badge>
-                  <span className="font-mono text-[11px] text-slate-500">{ptDate(String(record.created_at).slice(0, 10))}</span>
-                </div>
-                <p className="mt-2 truncate text-sm font-medium text-slate-100">{patientNames[record.patient_id] || "Paciente"}</p>
-                <p className="mt-1 truncate text-xs text-slate-500">{record.fields?.diagnostico || record.fields?.queixa_principal || "Sem resumo"}</p>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setRecordId(record.id)}
+                  className="w-full text-left"
+                  data-testid={`report-select-${record.id}`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <Badge variant="outline" className="border-teal-900 text-teal-300">{TEMPLATE_LABELS[record.template] || record.template}</Badge>
+                    <span className="font-mono text-[11px] text-slate-500">{ptDate(String(record.created_at).slice(0, 10))}</span>
+                  </div>
+                  <p className="mt-2 truncate text-sm font-medium text-slate-100">{patientNames[record.patient_id] || "Paciente"}</p>
+                  <p className="mt-1 truncate text-xs text-slate-500">{record.fields?.diagnostico || record.fields?.queixa_principal || "Sem resumo"}</p>
+                </button>
+                {canManageReports ? (
+                  <div className="mt-3 flex justify-end gap-2 border-t border-white/[0.06] pt-2">
+                    <Button variant="ghost" size="sm" onClick={() => openEditor(record)} data-testid={`report-edit-${record.id}`}>
+                      <Pencil className="size-3.5" /> Editar
+                    </Button>
+                    <Button variant="ghost" size="sm" className="text-red-300 hover:bg-red-950/30 hover:text-red-200" onClick={() => setDeleteTarget(record)} data-testid={`report-delete-${record.id}`}>
+                      <Trash2 className="size-3.5" /> Excluir
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
             ))}
           </CardContent>
         </Card>
@@ -180,7 +209,7 @@ export default function MedicalReports() {
                     <Copy className="size-4" /> {saveCopy.isPending ? "Salvando…" : "Salvar cópia"}
                   </Button>
                 ) : null}
-                {canEditReport ? (
+                {canManageReports ? (
                   <Button variant="outline" size="sm" onClick={openEditor} data-testid="report-edit-button">
                     <Pencil className="size-4" /> Editar laudo
                   </Button>
@@ -249,6 +278,28 @@ export default function MedicalReports() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(deleteTarget)} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-heading">Excluir laudo?</DialogTitle>
+            <p className="text-sm text-slate-400">
+              O laudo de {deleteTarget?.patient_name || "este paciente"} será retirado da lista da clínica. O registro será arquivado, não apagado permanentemente.
+            </p>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" disabled={deleteReport.isPending}>Cancelar</Button>} />
+            <Button
+              variant="destructive"
+              onClick={() => deleteTarget && deleteReport.mutate(deleteTarget)}
+              disabled={!deleteTarget || deleteReport.isPending}
+              data-testid="report-delete-confirm"
+            >
+              {deleteReport.isPending ? "Excluindo…" : "Confirmar exclusão"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </AppShell>
