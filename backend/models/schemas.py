@@ -110,6 +110,7 @@ class TenantOut(BaseModel):
     id: str
     name: str
     admin_name: str | None = None
+    admin_email: EmailStr | None = None
     specialty: str
     plan_id: str | None = None
     plan_name: str | None = None
@@ -123,6 +124,10 @@ class TenantOut(BaseModel):
 
 
 class TenantPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=120)
+    specialty: Literal["geral", "odonto", "oftalmo"] | None = None
+    admin_name: str | None = Field(default=None, min_length=2, max_length=120)
+    admin_email: EmailStr | None = None
     status: Literal["active", "blocked"] | None = None
     plan_id: str | None = None
     subscription_status: Literal["trialing", "pending_payment", "active"] | None = None

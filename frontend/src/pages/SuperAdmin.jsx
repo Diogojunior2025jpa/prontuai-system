@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Ban, Building2, CheckCircle2, LogOut, Plus, TrendingUp, Users } from "lucide-react";
+import { Activity, Ban, Building2, CheckCircle2, LogOut, Pencil, Plus, TrendingUp, Users } from "lucide-react";
 import { toast } from "sonner";
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/lib/api";
 import AssistantWidget from "@/components/AssistantWidget";
@@ -24,6 +24,7 @@ import { SPECIALTY_LABELS, brl, endSession } from "@/lib/session";
 
 const EMPTY_PLAN = { name: "", price: "", max_users: "", max_patients: "", features: "", active: true };
 const EMPTY_TENANT = { name: "", specialty: "geral", plan_id: "", admin_name: "", admin_email: "", admin_password: "" };
+const EMPTY_TENANT_EDIT = { name: "", specialty: "geral", plan_id: "", admin_name: "", admin_email: "", status: "active", subscription_status: "active" };
 
 export default function SuperAdmin() {
   const qc = useQueryClient();
@@ -36,6 +37,8 @@ export default function SuperAdmin() {
   const [planOpen, setPlanOpen] = useState(false);
   const [tenantForm, setTenantForm] = useState(EMPTY_TENANT);
   const [tenantOpen, setTenantOpen] = useState(false);
+  const [tenantEditForm, setTenantEditForm] = useState(EMPTY_TENANT_EDIT);
+  const [tenantEditing, setTenantEditing] = useState(null);
 
   const { data: overview, isError: ovErr } = useQuery({
     queryKey: ["admin", "overview"], queryFn: () => apiGet("/admin/overview"), retry: false,
@@ -104,7 +107,11 @@ export default function SuperAdmin() {
 
   const patchTenant = useMutation({
     mutationFn: ({ id, body }) => apiPatch(`/admin/tenants/${id}`, body),
-    onSuccess: () => { invalidate(); toast.success("Clínica atualizada"); },
+    onSuccess: (_result, variables) => {
+      invalidate();
+      if (variables.closeDialog) setTenantEditing(null);
+      toast.success("Clínica atualizada");
+    },
     onError: (e) => toast.error(e?.body?.detail || "Falha ao atualizar clínica"),
   });
 
@@ -136,6 +143,37 @@ export default function SuperAdmin() {
       max_patients: Number(planForm.max_patients) || 1,
       features: planForm.features.split(",").map((s) => s.trim()).filter(Boolean),
       active: planForm.active,
+    });
+  }
+
+  function openEditTenant(tenant) {
+    setTenantEditing(tenant);
+    setTenantEditForm({
+      name: tenant.name || "",
+      specialty: tenant.specialty || "geral",
+      plan_id: tenant.plan_id || "",
+      admin_name: tenant.admin_name || "",
+      admin_email: tenant.admin_email || "",
+      status: tenant.status || "active",
+      subscription_status: tenant.subscription_status || "active",
+    });
+  }
+
+  function submitTenantEdit(e) {
+    e.preventDefault();
+    if (!tenantEditing) return;
+    patchTenant.mutate({
+      id: tenantEditing.id,
+      closeDialog: true,
+      body: {
+        name: tenantEditForm.name.trim(),
+        specialty: tenantEditForm.specialty,
+        plan_id: tenantEditForm.plan_id,
+        status: tenantEditForm.status,
+        subscription_status: tenantEditForm.subscription_status,
+        ...(tenantEditForm.admin_name.trim() ? { admin_name: tenantEditForm.admin_name.trim() } : {}),
+        ...(tenantEditForm.admin_email.trim() ? { admin_email: tenantEditForm.admin_email.trim() } : {}),
+      },
     });
   }
 
@@ -254,14 +292,92 @@ export default function SuperAdmin() {
               </Dialog>
             </div>
 
+            <Dialog open={Boolean(tenantEditing)} onOpenChange={(open) => { if (!open) setTenantEditing(null); }}>
+              <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+                <DialogHeader>
+                  <DialogTitle className="font-heading">Editar clínica e contato</DialogTitle>
+                  <p className="text-xs text-slate-400">Atualize os dados da clínica e da conta administradora principal. Senhas não são exibidas nem alteradas aqui.</p>
+                </DialogHeader>
+                <form className="space-y-4" onSubmit={submitTenantEdit} data-testid="tenant-edit-form">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit-tenant-name">Nome da clínica</Label>
+                    <Input id="edit-tenant-name" value={tenantEditForm.name} maxLength={120} minLength={2} onChange={(e) => setTenantEditForm((f) => ({ ...f, name: e.target.value }))} required data-testid="tenant-edit-name" />
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="edit-tenant-admin-name">Responsável principal</Label>
+                      <Input id="edit-tenant-admin-name" value={tenantEditForm.admin_name} maxLength={120} minLength={2} onChange={(e) => setTenantEditForm((f) => ({ ...f, admin_name: e.target.value }))} data-testid="tenant-edit-admin-name" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="edit-tenant-admin-email">E-mail de acesso</Label>
+                      <Input id="edit-tenant-admin-email" type="email" value={tenantEditForm.admin_email} onChange={(e) => setTenantEditForm((f) => ({ ...f, admin_email: e.target.value }))} data-testid="tenant-edit-admin-email" />
+                    </div>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label>Especialidade</Label>
+                      <Select value={tenantEditForm.specialty} onValueChange={(v) => setTenantEditForm((f) => ({ ...f, specialty: v }))}>
+                        <SelectTrigger data-testid="tenant-edit-specialty">
+                          <SelectValue>{(v) => SPECIALTY_LABELS[v] || "Especialidade"}</SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(SPECIALTY_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Plano</Label>
+                      <Select value={tenantEditForm.plan_id} onValueChange={(v) => setTenantEditForm((f) => ({ ...f, plan_id: v }))}>
+                        <SelectTrigger data-testid="tenant-edit-plan">
+                          <SelectValue>{(v) => planLabels[v] || "Plano"}</SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {planList.map((plan) => <SelectItem key={plan.id} value={plan.id}>{plan.name} · {brl(plan.price)}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label>Status da clínica</Label>
+                      <Select value={tenantEditForm.status} onValueChange={(v) => setTenantEditForm((f) => ({ ...f, status: v }))}>
+                        <SelectTrigger data-testid="tenant-edit-status"><SelectValue>{(v) => v === "active" ? "Ativa" : "Bloqueada"}</SelectValue></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="active">Ativa</SelectItem>
+                          <SelectItem value="blocked">Bloqueada</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Status da assinatura</Label>
+                      <Select value={tenantEditForm.subscription_status} onValueChange={(v) => setTenantEditForm((f) => ({ ...f, subscription_status: v }))}>
+                        <SelectTrigger data-testid="tenant-edit-subscription"><SelectValue>{(v) => ({ active: "Ativa", trialing: "Teste grátis", pending_payment: "Pagamento pendente" }[v] || "Status")}</SelectValue></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="active">Ativa</SelectItem>
+                          <SelectItem value="trialing">Teste grátis</SelectItem>
+                          <SelectItem value="pending_payment">Pagamento pendente</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button type="submit" disabled={patchTenant.isPending || !tenantEditForm.plan_id} data-testid="tenant-edit-save">
+                      {patchTenant.isPending ? "Salvando…" : "Salvar alterações"}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+
             <div className="overflow-x-auto rounded-lg border border-[#1F2937] bg-[#111827]">
               {tenantList.length === 0 ? (
                 <p className="p-6 text-sm text-slate-500" data-testid="tenants-empty">Nenhuma clínica cadastrada.</p>
               ) : (
-                <Table className="min-w-[860px]" data-testid="superadmin-tenants-table">
+                <Table className="min-w-[1040px]" data-testid="superadmin-tenants-table">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Clínica</TableHead>
+                      <TableHead>E-mail principal</TableHead>
                       <TableHead>Especialidade</TableHead>
                       <TableHead>Plano</TableHead>
                       <TableHead>Usuários</TableHead>
@@ -278,6 +394,7 @@ export default function SuperAdmin() {
                           <p className="font-medium text-slate-100">{t.name}</p>
                           <p className="text-[11px] text-slate-500">{t.admin_name || "Responsável não informado"}</p>
                         </TableCell>
+                        <TableCell className="text-xs text-slate-400" data-testid={`tenant-email-${t.id}`}>{t.admin_email || "E-mail não informado"}</TableCell>
                         <TableCell className="text-slate-400 text-xs">{SPECIALTY_LABELS[t.specialty] || t.specialty}</TableCell>
                         <TableCell>
                           <Select value={t.plan_id || ""} onValueChange={(v) => patchTenant.mutate({ id: t.id, body: { plan_id: v } })}>
@@ -310,6 +427,12 @@ export default function SuperAdmin() {
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openEditTenant(t)}
+                              data-testid={`tenant-edit-${t.id}`}
+                            ><Pencil className="size-3.5" /> Editar</Button>
                             {(t.subscription_status === "pending_payment" || (t.subscription_status === "trialing" && t.trial_ends_at && new Date(t.trial_ends_at) <= new Date())) ? <Button
                               variant="outline"
                               size="sm"

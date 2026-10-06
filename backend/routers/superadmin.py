@@ -52,12 +52,13 @@ async def _tenant_out(t: dict, plans: dict) -> TenantOut:
     plan = plans.get(t.get("plan_id"))
     admins = await db.users.find(
         {"tenant_id": t["id"], "role": "clinic_admin"},
-        {"_id": 0, "name": 1},
+        {"_id": 0, "name": 1, "email": 1},
     ).sort("created_at", 1).to_list(1)
     return TenantOut(
         id=t["id"],
         name=t["name"],
         admin_name=admins[0].get("name") if admins else None,
+        admin_email=admins[0].get("email") if admins else None,
         specialty=t.get("specialty", "geral"),
         plan_id=t.get("plan_id"),
         plan_name=plan["name"] if plan else None,
@@ -119,13 +120,44 @@ async def patch_tenant(tenant_id: str, payload: TenantPatch):
     update = {k: v for k, v in payload.model_dump().items() if v is not None}
     if not update:
         raise HTTPException(status_code=422, detail="Nada para atualizar")
+
+    current = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    if not current:
+        raise HTTPException(status_code=404, detail="Clínica não encontrada")
+
+    admin_updates = {}
+    if "admin_name" in update or "admin_email" in update:
+        admin = await db.users.find(
+            {"tenant_id": tenant_id, "role": "clinic_admin"},
+            {"_id": 0, "id": 1, "email": 1},
+        ).sort("created_at", 1).to_list(1)
+        if not admin:
+            raise HTTPException(status_code=409, detail="Clínica sem administrador principal")
+        admin = admin[0]
+        if "admin_name" in update:
+            admin_updates["name"] = update.pop("admin_name")
+        if "admin_email" in update:
+            email = str(update.pop("admin_email")).lower().strip()
+            duplicate = await db.users.find_one({"email": email, "id": {"$ne": admin["id"]}}, {"_id": 0, "id": 1})
+            if duplicate:
+                raise HTTPException(status_code=409, detail="E-mail já cadastrado")
+            admin_updates["email"] = email
+
+    if "plan_id" in update:
+        plan = await db.plans.find_one({"id": update["plan_id"]}, {"_id": 0, "id": 1})
+        if not plan:
+            raise HTTPException(status_code=404, detail="Plano não encontrado")
+
     if update.get("subscription_status") == "active":
         update["subscription_started_at"] = utcnow()
+    if admin_updates:
+        await db.users.update_one(
+            {"id": admin["id"], "tenant_id": tenant_id},
+            {"$set": admin_updates},
+        )
     t = await db.tenants.find_one_and_update(
         {"id": tenant_id}, {"$set": update}, return_document=True, projection={"_id": 0}
     )
-    if not t:
-        raise HTTPException(status_code=404, detail="Clínica não encontrada")
     plans = {p["id"]: p for p in await db.plans.find({}, {"_id": 0}).to_list(200)}
     return await _tenant_out(t, plans)
 
