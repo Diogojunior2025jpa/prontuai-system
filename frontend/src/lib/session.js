@@ -40,6 +40,12 @@ export const SPECIALTY_LABELS = {
   oftalmo: "Oftalmologia",
 };
 
+export const PLAN_DESCRIPTIONS = {
+  "plan-basico": "Organize agenda, prontuários e pacientes com o essencial para uma rotina clínica mais fluida.",
+  "plan-pro": "Ganhe tempo no atendimento com voz e IA, e reúna gestão e marketing em um só lugar.",
+  "plan-enterprise": "Amplie a operação entre unidades com relatórios avançados e suporte dedicado.",
+};
+
 export function hasPerm(user, perm) {
   if (!user) return false;
   const p = user.permissions || [];

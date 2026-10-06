@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiGet, apiPut } from "@/lib/api";
-import { brl } from "@/lib/session";
+import { brl, PLAN_DESCRIPTIONS } from "@/lib/session";
 
 export default function SubscriptionPlans() {
   const navigate = useNavigate();
@@ -47,7 +47,7 @@ export default function SubscriptionPlans() {
           {plans.map((plan) => {
             const selected = subscription?.plan_id === plan.id;
             return <Card key={plan.id} className={`border-[#283443] bg-[#111820] ${selected ? "ring-1 ring-cyan-700" : ""}`} data-testid={`subscription-plan-${plan.id}`}>
-              <CardHeader><div className="flex items-start justify-between gap-3"><CardTitle className="font-heading text-lg">{plan.name}</CardTitle>{selected ? <Badge variant="outline" className="border-cyan-900 text-cyan-300">Selecionado</Badge> : null}</div><p className="pt-2 font-mono text-2xl">{brl(plan.price)}<span className="font-sans text-xs text-slate-500"> / mês</span></p></CardHeader>
+              <CardHeader><div className="flex items-start justify-between gap-3"><CardTitle className="font-heading text-lg">{plan.name}</CardTitle>{selected ? <Badge variant="outline" className="border-cyan-900 text-cyan-300">Selecionado</Badge> : null}</div><p className="pt-2 text-sm leading-6 text-slate-400">{PLAN_DESCRIPTIONS[plan.id] || "Organize a rotina da sua clínica com os recursos deste plano."}</p><p className="pt-2 font-mono text-2xl">{brl(plan.price)}<span className="font-sans text-xs text-slate-500"> / mês</span></p></CardHeader>
               <CardContent className="space-y-4"><ul className="space-y-2">{(plan.features || []).map((feature) => <li key={feature} className="flex gap-2 text-sm text-slate-300"><Check className="size-4 shrink-0 text-emerald-400" />{feature}</li>)}<li className="flex gap-2 text-sm text-slate-400"><Check className="size-4 shrink-0 text-emerald-400" />Até {plan.max_users} usuários</li><li className="flex gap-2 text-sm text-slate-400"><Check className="size-4 shrink-0 text-emerald-400" />Até {plan.max_patients} pacientes</li></ul>
                 <Button className="w-full" variant={selected || paidActive ? "outline" : "default"} disabled={selectPlan.isPending || selected || paidActive} onClick={() => selectPlan.mutate(plan.id)} data-testid={`select-plan-${plan.id}`}>{selected ? "Plano atual" : paidActive ? "Plano ativo" : selectPlan.isPending ? "Salvando…" : isTrialing ? "Usar no teste" : "Selecionar plano"}</Button>
               </CardContent>

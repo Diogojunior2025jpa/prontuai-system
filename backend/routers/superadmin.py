@@ -50,9 +50,14 @@ async def delete_plan(plan_id: str):
 # ---------- tenants ----------
 async def _tenant_out(t: dict, plans: dict) -> TenantOut:
     plan = plans.get(t.get("plan_id"))
+    admins = await db.users.find(
+        {"tenant_id": t["id"], "role": "clinic_admin"},
+        {"_id": 0, "name": 1},
+    ).sort("created_at", 1).to_list(1)
     return TenantOut(
         id=t["id"],
         name=t["name"],
+        admin_name=admins[0].get("name") if admins else None,
         specialty=t.get("specialty", "geral"),
         plan_id=t.get("plan_id"),
         plan_name=plan["name"] if plan else None,

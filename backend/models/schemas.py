@@ -109,6 +109,7 @@ class TenantIn(BaseModel):
 class TenantOut(BaseModel):
     id: str
     name: str
+    admin_name: str | None = None
     specialty: str
     plan_id: str | None = None
     plan_name: str | None = None

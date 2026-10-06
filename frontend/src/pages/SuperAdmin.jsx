@@ -276,7 +276,7 @@ export default function SuperAdmin() {
                       <TableRow key={t.id} data-testid={`tenant-row-${t.id}`}>
                         <TableCell>
                           <p className="font-medium text-slate-100">{t.name}</p>
-                          <p className="font-mono text-[11px] text-slate-500">{t.id}</p>
+                          <p className="text-[11px] text-slate-500">{t.admin_name || "Responsável não informado"}</p>
                         </TableCell>
                         <TableCell className="text-slate-400 text-xs">{SPECIALTY_LABELS[t.specialty] || t.specialty}</TableCell>
                         <TableCell>
