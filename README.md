@@ -85,16 +85,17 @@ FastAPI, async throughout. `python` is the app venv interpreter
   above its local imports, and `lib/db.py` self-loads it so standalone scripts
   inherit it too. The pod runs `mongod` locally, so `MONGO_URL` points at
   `localhost`. Add new secrets/config here; read them with `os.environ`.
-  Password recovery uses the Gmail API over HTTPS. Configure
-  `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN`, and
-  `GMAIL_FROM_EMAIL` in Render's secret environment settings, and set
-  `FRONTEND_URL` to the public Vercel origin. Enable the Gmail API in a Google
-  Cloud project, create OAuth credentials with the `gmail.send` scope, and
-  authorize the Gmail mailbox used as the sender. `GMAIL_FROM_EMAIL` must be
-  that mailbox or an authorized Gmail send-as alias. Never commit OAuth secrets
-  or paste them into chat. Until Gmail OAuth is configured, password reset
-  messages are not sent; the public endpoint intentionally returns a generic
-  response either way.
+  Password recovery uses a Google Apps Script web app to send through a Gmail
+  account over HTTPS. Copy `backend/apps_script/password_reset.gs` into a new
+  script, set the `GOOGLE_SCRIPT_SECRET` Script Property, authorize email
+  sending, and deploy it as a web app executing as the owner and accessible to
+  anyone. Configure `GOOGLE_SCRIPT_URL` and the same `GOOGLE_SCRIPT_SECRET` in
+  Render's secret environment settings, plus `FRONTEND_URL` for the public
+  Vercel origin. Protect the shared secret and redeploy the Apps Script whenever
+  its code changes. Consumer Gmail accounts have a 100-recipient daily Apps
+  Script quota; Google can change quotas. Until both Render and Apps Script are
+  configured, password reset messages are not sent; the public endpoint
+  intentionally returns a generic response either way.
   Public clinic registration creates a seven-day trial on the least expensive
   active plan. Plan selection after expiry is recorded as `pending_payment`;
   no Pix charge is created or marked paid because a payment provider has not
