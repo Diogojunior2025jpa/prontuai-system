@@ -198,6 +198,33 @@ async def test_pagbank_recurring_link_checkout_requires_manual_confirmation(monk
 
 
 @pytest.mark.asyncio
+async def test_pagbank_checkout_accepts_stale_selected_plan_id(monkeypatch):
+    tenants = MemoryTenants([{
+        "id": "tenant-1",
+        "subscription_status": "pending_payment",
+        "plan_id": "pro",
+        "selected_plan_id": "basic",
+    }])
+    plans = MemoryTenants([{
+        "id": "pro",
+        "name": "Pro",
+        "price": 349,
+        "active": True,
+        "pagbank_recurring_url": "https://pag.ae/recurring-pro",
+    }])
+    monkeypatch.setattr(clinic, "db", SimpleNamespace(tenants=tenants, plans=plans))
+
+    result = await clinic.subscription_checkout(
+        SelectPlanIn(plan_id="pro"),
+        {"id": "admin-1", "tenant_id": "tenant-1", "role": "clinic_admin"},
+    )
+
+    assert result["payment_url"] == "https://pag.ae/recurring-pro"
+    assert tenants.documents[0]["selected_plan_id"] == "pro"
+    assert tenants.documents[0]["pagbank_recurring_link_started"] is True
+
+
+@pytest.mark.asyncio
 async def test_pagbank_checkout_requires_a_configured_recurring_link(monkeypatch):
     tenants = MemoryTenants([{
         "id": "tenant-1",

@@ -125,7 +125,10 @@ async def subscription_checkout(payload: SelectPlanIn, user: dict = Depends(curr
         raise HTTPException(status_code=404, detail="Clínica não encontrada")
     if tenant.get("subscription_status", "active") == "active":
         raise HTTPException(status_code=409, detail="A assinatura já está ativa")
-    if tenant.get("selected_plan_id") != payload.plan_id:
+    if payload.plan_id not in {
+        tenant.get("selected_plan_id"),
+        tenant.get("plan_id"),
+    }:
         raise HTTPException(status_code=409, detail="Selecione o plano antes de iniciar o pagamento")
 
     plan = await db.plans.find_one({"id": payload.plan_id, "active": True}, {"_id": 0})
@@ -186,7 +189,10 @@ async def subscription_checkout(payload: SelectPlanIn, user: dict = Depends(curr
         {
             "id": tenant["id"],
             "subscription_status": {"$ne": "active"},
-            "selected_plan_id": plan["id"],
+            "$or": [
+                {"selected_plan_id": plan["id"]},
+                {"plan_id": plan["id"]},
+            ],
             "pagbank_recurring_link_started": {"$ne": True},
         },
         {
