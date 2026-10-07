@@ -8,8 +8,7 @@
 - A API pública respondeu HTTP 200 na última verificação.
 - A recuperação de senha por Gmail via Google Apps Script foi configurada e
   testada com sucesso: o e-mail chegou à caixa de entrada.
-- Último commit publicado antes deste trabalho: `9ea3170`
-  (`docs: atualiza relatorio de andamento`).
+- Último commit publicado: `4b5ea11` (`docs: registra publicacao do guia e Asaas`).
 - Não há credenciais, tokens ou valores de segredos registrados neste arquivo.
 
 ## Trabalho concluído e publicado
@@ -94,6 +93,14 @@
 - Commit `2869c6e` enviado para `origin/main`. A conclusão do deploy automático
   não foi confirmada nesta sessão.
 
+### Ajuste de boas-vindas no painel — alteração atual
+
+- Removido o identificador técnico `tenant: ...` da barra lateral da clínica e
+  substituído por “Seja bem-vindo!”.
+- Mantido o nome da clínica e as demais informações do painel.
+- Alteração preparada para publicação com este relatório; não altera regras nem
+  dados de assinatura.
+
 ### Integração Asaas — código publicado; configuração e teste pendentes
 
 - Após a escolha do usuário, iniciada a integração de assinaturas mensais com
@@ -151,11 +158,8 @@
 
 ## Estado do repositório ao fechar
 
-- Commit publicado: `2869c6e` (`feat: adiciona guia financeiro e cobranca
-  Asaas`); confirmar deploy automático da Vercel/Render e testar o Sandbox
-  Asaas antes de usar cobrança real.
-- `relatorio_execucao.txt` permanece como a única alteração local não
-  relacionada e não foi incluída no commit.
+- Commits publicados: `2869c6e` (funcionalidades) e `4b5ea11` (relatório);
+  alterações posteriores de boas-vindas serão registradas em novo commit.
 - `relatorio_execucao.txt` possui alteração local anterior e foi preservado,
   sem inclusão nos commits desta sequência.
 - Este relatório acompanha o estado publicado do repositório.

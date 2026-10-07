@@ -66,8 +66,8 @@ export default function AppShell({ children, title, subtitle, actions }) {
           <p className="mt-1 text-sm font-medium text-slate-100 truncate" data-testid="tenant-name">
             {tenant?.name || (user?.role === "super_admin" ? "Plataforma ProntuAI" : "—")}
           </p>
-          <p className="text-xs text-slate-500 font-mono mt-0.5" data-testid="tenant-id">
-            {tenant ? `tenant: ${tenant.id}` : "sem tenant"}
+          <p className="mt-1 text-xs text-slate-400" data-testid="tenant-welcome">
+            Seja bem-vindo!
           </p>
           {tenant?.specialty ? (
             <Badge variant="outline" className="mt-2 text-[11px] border-indigo-900 text-indigo-300">
