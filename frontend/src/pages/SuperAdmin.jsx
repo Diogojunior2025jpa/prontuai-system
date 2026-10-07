@@ -40,6 +40,8 @@ export default function SuperAdmin() {
   const [tenantOpen, setTenantOpen] = useState(false);
   const [tenantEditForm, setTenantEditForm] = useState(EMPTY_TENANT_EDIT);
   const [tenantEditing, setTenantEditing] = useState(null);
+  const [trialGrantTenant, setTrialGrantTenant] = useState(null);
+  const [trialDays, setTrialDays] = useState("7");
 
   const { data: overview, isError: ovErr } = useQuery({
     queryKey: ["admin", "overview"], queryFn: () => apiGet("/admin/overview"), retry: false,
@@ -52,6 +54,16 @@ export default function SuperAdmin() {
   const { data: tenants } = useQuery({
     queryKey: ["admin", "tenants"], queryFn: () => apiGet("/admin/tenants"), retry: false,
     enabled: canLoadAdmin,
+  });
+
+  const grantTrial = useMutation({
+    mutationFn: ({ tenantId, days }) => apiPost(`/admin/tenants/${tenantId}/trial`, { days }),
+    onSuccess: () => {
+      invalidate();
+      setTrialGrantTenant(null);
+      toast.success("Período de teste concedido");
+    },
+    onError: (e) => toast.error(e?.body?.detail || "Falha ao conceder período de teste"),
   });
 
   const planList = plans || [];
@@ -183,7 +195,9 @@ export default function SuperAdmin() {
         specialty: tenantEditForm.specialty,
         plan_id: tenantEditForm.plan_id,
         status: tenantEditForm.status,
-        subscription_status: tenantEditForm.subscription_status,
+        ...(tenantEditForm.subscription_status !== tenantEditing.subscription_status
+          ? { subscription_status: tenantEditForm.subscription_status }
+          : {}),
         ...(tenantEditForm.admin_name.trim() ? { admin_name: tenantEditForm.admin_name.trim() } : {}),
         ...(tenantEditForm.admin_email.trim() ? { admin_email: tenantEditForm.admin_email.trim() } : {}),
       },
@@ -367,8 +381,8 @@ export default function SuperAdmin() {
                         <SelectTrigger data-testid="tenant-edit-subscription"><SelectValue>{(v) => ({ active: "Ativa", trialing: "Teste grátis", pending_payment: "Pagamento pendente" }[v] || "Status")}</SelectValue></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="active">Ativa</SelectItem>
-                          <SelectItem value="trialing">Teste grátis</SelectItem>
                           <SelectItem value="pending_payment">Pagamento pendente</SelectItem>
+                          {tenantEditing?.subscription_status === "trialing" ? <SelectItem value="trialing" disabled>Teste grátis — use “Conceder teste” para ajustar</SelectItem> : null}
                         </SelectContent>
                       </Select>
                     </div>
@@ -376,6 +390,46 @@ export default function SuperAdmin() {
                   <DialogFooter>
                     <Button type="submit" disabled={patchTenant.isPending || !tenantEditForm.plan_id} data-testid="tenant-edit-save">
                       {patchTenant.isPending ? "Salvando…" : "Salvar alterações"}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+
+            <Dialog open={Boolean(trialGrantTenant)} onOpenChange={(open) => { if (!open) setTrialGrantTenant(null); }}>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="font-heading">Conceder período de teste</DialogTitle>
+                  <p className="text-sm text-slate-400">{trialGrantTenant?.name} · o acesso de teste será reiniciado pelo número de dias definido abaixo.</p>
+                </DialogHeader>
+                <form
+                  className="space-y-4"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (trialGrantTenant) {
+                      grantTrial.mutate({ tenantId: trialGrantTenant.id, days: Number(trialDays) });
+                    }
+                  }}
+                  data-testid="tenant-trial-grant-form"
+                >
+                  <div className="space-y-1.5">
+                    <Label htmlFor="tenant-trial-days">Dias de teste</Label>
+                    <Input
+                      id="tenant-trial-days"
+                      type="number"
+                      min="1"
+                      max="3650"
+                      step="1"
+                      value={trialDays}
+                      onChange={(event) => setTrialDays(event.target.value)}
+                      required
+                      data-testid="tenant-trial-days-input"
+                    />
+                    <p className="text-xs text-slate-500">Novos cadastros recebem 7 dias automaticamente. Somente o Super Admin pode conceder ou reiniciar o teste.</p>
+                  </div>
+                  <DialogFooter>
+                    <Button type="submit" disabled={grantTrial.isPending} data-testid="tenant-trial-grant-submit">
+                      {grantTrial.isPending ? "Concedendo…" : "Conceder teste"}
                     </Button>
                   </DialogFooter>
                 </form>
@@ -446,6 +500,15 @@ export default function SuperAdmin() {
                               onClick={() => openEditTenant(t)}
                               data-testid={`tenant-edit-${t.id}`}
                             ><Pencil className="size-3.5" /> Editar</Button>
+                            {t.subscription_status !== "active" && t.can_grant_trial ? <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setTrialDays(String(t.trial_duration_days || 7));
+                                setTrialGrantTenant(t);
+                              }}
+                              data-testid={`tenant-trial-grant-${t.id}`}
+                            >Conceder teste</Button> : null}
                             {(t.subscription_status === "pending_payment" || (t.subscription_status === "trialing" && t.trial_ends_at && new Date(t.trial_ends_at) <= new Date())) ? <Button
                               variant="outline"
                               size="sm"

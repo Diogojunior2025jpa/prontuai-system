@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -7,7 +7,7 @@ from lib.auth import ROLE_DEFAULTS, hash_password, require_super_admin
 from lib.db import db
 from lib.api_keys import provider_key_status, save_provider_key
 from lib.monitoring import system_snapshot
-from models.schemas import ApiKeyIn, NoticeIn, NoticeOut, NoticePatch, Plan, PlanIn, TenantIn, TenantOut, TenantPatch, new_id, utcnow
+from models.schemas import ApiKeyIn, GrantTrialIn, NoticeIn, NoticeOut, NoticePatch, Plan, PlanIn, TenantIn, TenantOut, TenantPatch, new_id, utcnow
 
 router = APIRouter(prefix="/admin", tags=["super-admin"], dependencies=[Depends(require_super_admin)])
 
@@ -69,6 +69,8 @@ async def _tenant_out(t: dict, plans: dict) -> TenantOut:
         created_at=t.get("created_at"),
         subscription_status=t.get("subscription_status", "active"),
         trial_ends_at=t.get("trial_ends_at"),
+        trial_duration_days=t.get("trial_duration_days", 7),
+        can_grant_trial=not bool(t.get("asaas_subscription_id") or t.get("pagbank_recurring_link_started")),
         pagbank_recurring_link_started=bool(t.get("pagbank_recurring_link_started")),
     )
 
@@ -164,6 +166,54 @@ async def patch_tenant(tenant_id: str, payload: TenantPatch):
     )
     plans = {p["id"]: p for p in await db.plans.find({}, {"_id": 0}).to_list(200)}
     return await _tenant_out(t, plans)
+
+
+@router.post("/tenants/{tenant_id}/trial")
+async def grant_tenant_trial(tenant_id: str, payload: GrantTrialIn):
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Clínica não encontrada")
+    if tenant.get("subscription_status", "active") == "active":
+        raise HTTPException(status_code=409, detail="A clínica já possui uma assinatura ativa")
+    if tenant.get("asaas_subscription_id") or tenant.get("pagbank_recurring_link_started"):
+        raise HTTPException(
+            status_code=409,
+            detail="Cancele ou confira a cobrança existente no provedor antes de conceder um novo teste.",
+        )
+
+    now = utcnow()
+    trial_ends_at = now + timedelta(days=payload.days)
+    result = await db.tenants.update_one(
+        {
+            "id": tenant_id,
+            "subscription_status": {"$ne": "active"},
+            "asaas_subscription_id": {"$exists": False},
+            "pagbank_recurring_link_started": {"$ne": True},
+        },
+        {
+            "$set": {
+                "subscription_status": "trialing",
+                "trial_started_at": now,
+                "trial_duration_days": payload.days,
+                "trial_ends_at": trial_ends_at,
+            },
+            "$unset": {
+                "subscription_payment_status": "",
+                "subscription_payment_due_date": "",
+                "subscription_grace_until": "",
+            },
+        },
+    )
+    if not result.matched_count:
+        raise HTTPException(
+            status_code=409,
+            detail="A assinatura mudou ou uma cobrança foi iniciada. Atualize a página e confira o provedor.",
+        )
+    return {
+        "subscription_status": "trialing",
+        "trial_duration_days": payload.days,
+        "trial_ends_at": trial_ends_at,
+    }
 
 
 @router.post("/tenants/{tenant_id}/subscription-payment/reset")

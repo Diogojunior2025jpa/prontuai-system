@@ -8,8 +8,7 @@
 - A API pública respondeu HTTP 200 na última verificação.
 - A recuperação de senha por Gmail via Google Apps Script foi configurada e
   testada com sucesso: o e-mail chegou à caixa de entrada.
-- Último commit no histórico publicado: `6dce72a` (`docs: atualiza estado do painel de boas-vindas`).
-- A migração PagBank descrita abaixo está em alterações locais, ainda não publicada.
+- Último commit publicado antes desta atualização: `af32c82` (`fix: corrige plano selecionado no checkout PagBank`).
 - Não há credenciais, tokens ou valores de segredos registrados neste arquivo.
 
 ## Trabalho concluído e publicado
@@ -102,23 +101,39 @@
 - Alteração preparada para publicação com este relatório; não altera regras nem
   dados de assinatura.
 
-### Migração de cobrança para PagBank PF — em configuração
+### Pagamentos PagBank PF — configurados e checkout testado
 
 - A recorrência de novas assinaturas usa links mensais criados no painel PagBank,
   pois a API de Pagamentos Recorrentes não está habilitada para PF. Os links
   recorrentes PF aceitam cartão de crédito; não há confirmação automática por
   webhook nesse fluxo.
-- O Super Admin associa um link HTTPS a cada plano. A clínica é redirecionada
-  ao PagBank e permanece pendente até um administrador conferir o pagamento e
-  confirmar a assinatura no painel.
+- O usuário confirmou que configurou os links de pagamento para cada plano e
+  que o checkout PagBank abriu corretamente após a correção publicada no commit
+  `af32c82`.
+- A integração e a seleção de plano estão resolvidas. Cada clínica permanece
+  pendente após retornar do PagBank até um administrador conferir o pagamento
+  no painel e clicar em **Confirmar pagamento** no Super Admin.
 - O sistema bloqueia novas tentativas enquanto uma tentativa estiver em
   conferência. O Super Admin pode liberar outra após verificar que o PagBank
   não criou uma assinatura, para evitar cobranças recorrentes duplicadas.
 - Como os links PF não sincronizam renovações/cancelamentos por webhook, a
   conferência periódica no painel PagBank e eventual bloqueio/liberação manual
   da clínica também ficam sob responsabilidade do administrador.
-- Links PagBank, conta e configuração real ainda dependem do usuário; nenhum
-  link, token ou webhook foi configurado neste workspace.
+- O token de transação PagBank e um webhook não são necessários para o fluxo
+  recorrente por links PF.
+
+### Período de teste — regra corrigida
+
+- Novos cadastros recebem sete dias fixos de teste; a clínica não informa nem
+  altera a duração durante a seleção dos planos.
+- Trocar o plano durante o teste não reinicia nem estende a data final. Depois
+  do vencimento, a assinatura passa ao fluxo de contratação/pagamento; somente
+  o Super Admin pode conceder um novo período.
+- No painel Super Admin, a ação **Conceder teste** permite definir de 1 a 3.650
+  dias para uma clínica não pagante. O backend bloqueia a concessão quando há
+  assinatura Asaas ou tentativa recorrente PagBank existente.
+- Validação desta alteração: **48 testes do backend passaram**; build e lint
+  focado do frontend passaram.
 
 ### Integração Asaas — código legado para migração
 
@@ -148,11 +163,10 @@
 
 ## Pendências para continuar amanhã
 
-1. **Configurar PagBank PF:** criar links recorrentes mensais no painel PagBank
-   para cada plano ativo e cadastrar cada URL no Super Admin. Testar o checkout
-   e confirmar uma assinatura manualmente após verificar o pagamento no painel.
-   Cancelar no Asaas toda assinatura migrada para evitar cobrança dupla. Nunca
-   envie chaves pela conversa.
+1. **Operação PagBank:** conferir pagamentos e renovações no painel PagBank e
+   confirmar manualmente as assinaturas no Super Admin. Se houver assinaturas
+   Asaas antigas ainda ativas, migrá-las e cancelar a cobrança antiga somente
+   após confirmar a nova assinatura, para evitar cobrança dupla.
 2. **Confirmar deploy e testar o guia financeiro e a marca:** conferir a rota
    `/app/financeiro` com uma conta que tenha `finance.view`.
 3. **Financeiro completo da clínica:** decidir e implementar cadastro de
@@ -173,10 +187,11 @@
 
 ## Estado do repositório ao fechar
 
-- Último commit publicado: `6dce72a` (texto de boas-vindas e relatório).
-- Confirmar o deploy automático da Vercel/Render e configurar os links
-  recorrentes PagBank PF por plano antes de habilitar cobranças reais.
-- A alteração atual de PagBank ainda não foi commitada nem publicada.
+- Último commit de aplicação publicado antes desta atualização: `af32c82`
+  (correção do plano selecionado no checkout PagBank).
+- O usuário confirmou que o fluxo de checkout PagBank funcionou.
+- As regras de trial e esta atualização do relatório foram validadas localmente;
+  aguardar o deploy automático da versão correspondente para confirmar em produção.
 - `relatorio_execucao.txt` possui alteração local anterior e foi preservado,
   sem inclusão nos commits desta sequência.
 - Este relatório acompanha o estado publicado do repositório.

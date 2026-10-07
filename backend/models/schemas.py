@@ -134,6 +134,8 @@ class TenantOut(BaseModel):
     created_at: datetime | None = None
     subscription_status: str | None = None
     trial_ends_at: datetime | None = None
+    trial_duration_days: int = 7
+    can_grant_trial: bool = False
     pagbank_recurring_link_started: bool = False
 
 
@@ -144,7 +146,11 @@ class TenantPatch(BaseModel):
     admin_email: EmailStr | None = None
     status: Literal["active", "blocked"] | None = None
     plan_id: str | None = None
-    subscription_status: Literal["trialing", "pending_payment", "active"] | None = None
+    subscription_status: Literal["pending_payment", "active"] | None = None
+
+
+class GrantTrialIn(BaseModel):
+    days: int = Field(ge=1, le=3650)
 
 
 # ---------- global notices ----------

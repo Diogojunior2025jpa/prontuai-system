@@ -21,7 +21,7 @@ export default function SubscriptionPlans() {
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["clinic-subscription"] });
       if (result.subscription_status === "trialing") {
-        toast.success("Plano selecionado para o período de teste");
+        toast.success("Plano atualizado. A data final do teste não foi alterada.");
       } else {
         checkout.mutate(result.plan.id);
       }
@@ -63,6 +63,7 @@ export default function SubscriptionPlans() {
           <div><p className="overline text-cyan-400">Assinatura da clínica</p><h1 className="mt-2 font-heading text-2xl font-semibold">Planos disponíveis</h1><p className="mt-2 text-sm text-slate-400">Escolha o plano que atende à sua clínica.</p></div>
           {isTrialing && trialEnds ? <Badge variant="outline" className="border-emerald-900 text-emerald-300"><Clock3 className="mr-1 size-3" />Teste até {trialEnds.toLocaleDateString("pt-BR")}</Badge> : null}
         </header>
+        {isTrialing && trialEnds ? <p className="mt-5 rounded-md border border-cyan-900 bg-cyan-950/30 p-4 text-sm text-cyan-100" data-testid="subscription-trial-policy">Seu período de teste termina em {trialEnds.toLocaleDateString("pt-BR")}. Escolher outro plano não reinicia nem prolonga o teste. Após essa data, selecione um plano para contratar; somente o Super Admin pode conceder dias adicionais.</p> : null}
         {pendingPayment ? <p className="mt-5 rounded-md border border-amber-900 bg-amber-950/30 p-4 text-sm text-amber-200" data-testid="subscription-pending-payment">{paymentOverdue ? `Há uma cobrança anterior do Asaas em atraso. O acesso permanece disponível até ${graceUntil || "o fim do prazo de tolerância"}; regularize para evitar a suspensão.` : pagbankLinkStarted ? "Sua tentativa de assinatura PagBank foi iniciada. O acesso será liberado após a conferência manual do pagamento; não inicie outra assinatura enquanto aguarda." : "Seu teste terminou. Escolha um plano e continue pelo link recorrente PagBank. A cobrança recorrente exige cartão de crédito e o acesso será liberado após a confirmação manual do pagamento."}{subscription?.pending_plan_change_locked ? " Já existe uma assinatura iniciada para este plano; para alterá-lo, contate o suporte." : ""}</p> : null}
         {plansLoading ? <p className="mt-6 text-sm text-slate-400">Carregando planos…</p> : plans.length ? <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {plans.map((plan) => {
@@ -83,7 +84,7 @@ export default function SubscriptionPlans() {
                   }}
                   data-testid={`select-plan-${plan.id}`}
                 >
-                  {checkout.isPending ? "Abrindo PagBank…" : pendingPayment && selected && pagbankLinkStarted ? "Aguardando confirmação" : pendingPayment && selected ? "Continuar para PagBank" : selected ? "Plano atual" : paidActive ? "Plano ativo" : selectPlan.isPending ? "Salvando…" : isTrialing ? "Usar no teste" : "Selecionar plano"}
+                  {checkout.isPending ? "Abrindo PagBank…" : pendingPayment && selected && pagbankLinkStarted ? "Aguardando confirmação" : pendingPayment && selected ? "Continuar para PagBank" : selected && isTrialing ? "Plano em teste" : selected ? "Plano atual" : paidActive ? "Plano ativo" : selectPlan.isPending ? "Salvando…" : isTrialing ? "Escolher para depois do teste" : "Selecionar plano"}
                 </Button>
               </CardContent>
             </Card>;

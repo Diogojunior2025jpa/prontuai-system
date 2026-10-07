@@ -32,6 +32,7 @@ from models.schemas import (
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+DEFAULT_TRIAL_DAYS = 7
 logger = logging.getLogger(__name__)
 RESET_TOKEN_TTL = timedelta(minutes=30)
 
@@ -65,7 +66,8 @@ async def register(payload: RegisterIn, response: Response):
         "selected_plan_id": plans[0]["id"],
         "status": "active",
         "subscription_status": "trialing",
-        "trial_ends_at": now + timedelta(days=7),
+        "trial_duration_days": DEFAULT_TRIAL_DAYS,
+        "trial_ends_at": now + timedelta(days=DEFAULT_TRIAL_DAYS),
         "created_at": now,
     }
     user = {

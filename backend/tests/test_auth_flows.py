@@ -108,6 +108,7 @@ async def test_registration_creates_bcrypt_admin_and_seven_day_trial(monkeypatch
     assert user["role"] == "clinic_admin"
     assert bcrypt.checkpw(payload.password.encode(), user["password_hash"].encode())
     assert tenant["subscription_status"] == "trialing"
+    assert tenant["trial_duration_days"] == 7
     assert tenant["trial_ends_at"] - tenant["created_at"] == timedelta(days=7)
 
 
@@ -186,6 +187,27 @@ async def test_expired_trial_can_select_plan_without_claiming_payment(monkeypatc
     assert result["subscription_status"] == "pending_payment"
     assert tenants.documents[0]["plan_id"] == "pro"
     assert tenants.documents[0]["subscription_status"] == "pending_payment"
+    assert tenants.documents[0]["trial_ends_at"] < datetime.now(timezone.utc)
+
+
+@pytest.mark.asyncio
+async def test_changing_plan_during_trial_does_not_extend_trial(monkeypatch):
+    original_end = datetime.now(timezone.utc) + timedelta(days=2)
+    tenants = MemoryCollection([{
+        "id": "tenant-1",
+        "subscription_status": "trialing",
+        "trial_ends_at": original_end,
+    }])
+    plans = MemoryCollection([{"id": "pro", "name": "Pro", "price": 349, "active": True}])
+    monkeypatch.setattr(clinic_router, "db", MemoryDatabase(tenants=tenants, plans=plans))
+
+    result = await clinic_router.select_subscription_plan(
+        SelectPlanIn(plan_id="pro"),
+        {"id": "user-1", "tenant_id": "tenant-1", "role": "clinic_admin"},
+    )
+
+    assert result["subscription_status"] == "trialing"
+    assert tenants.documents[0]["trial_ends_at"] == original_end
 
 
 def test_bcrypt_passwords_are_limited_by_utf8_bytes():

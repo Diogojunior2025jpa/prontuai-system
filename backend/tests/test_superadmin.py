@@ -1,3 +1,4 @@
+from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -36,7 +37,9 @@ class MemoryCollection:
         document = next((document for document in self.documents if self.matches(document, query)), None)
         if not document:
             return SimpleNamespace(matched_count=0)
-        document.update(update["$set"])
+        document.update(update.get("$set", {}))
+        for key in update.get("$unset", {}):
+            document.pop(key, None)
         return SimpleNamespace(matched_count=1)
 
     async def find_one_and_update(self, query, update, **_kwargs):
@@ -55,8 +58,10 @@ class MemoryCollection:
     @staticmethod
     def matches(document, query):
         for key, expected in query.items():
-            if isinstance(expected, dict) and "$ne" in expected:
-                if document.get(key) == expected["$ne"]:
+            if isinstance(expected, dict):
+                if "$ne" in expected and document.get(key) == expected["$ne"]:
+                    return False
+                if "$exists" in expected and (key in document) != expected["$exists"]:
                     return False
             elif document.get(key) != expected:
                 return False
@@ -168,3 +173,50 @@ async def test_super_admin_cannot_assign_email_used_by_another_account(monkeypat
 
     assert error.value.status_code == 409
     assert users.documents[0]["email"] == "ana@example.com"
+
+
+@pytest.mark.asyncio
+async def test_super_admin_can_grant_custom_trial_duration(monkeypatch):
+    tenant = {
+        "id": "tenant-1",
+        "name": "Clínica",
+        "subscription_status": "pending_payment",
+        "trial_ends_at": None,
+    }
+    tenants = MemoryCollection([tenant])
+    monkeypatch.setattr(superadmin, "db", SimpleNamespace(tenants=tenants))
+
+    result = await superadmin.grant_tenant_trial(
+        "tenant-1",
+        superadmin.GrantTrialIn(days=21),
+    )
+
+    assert result["subscription_status"] == "trialing"
+    assert result["trial_duration_days"] == 21
+    assert tenants.documents[0]["trial_duration_days"] == 21
+    assert tenants.documents[0]["trial_ends_at"] - tenants.documents[0]["trial_started_at"] == timedelta(days=21)
+
+
+@pytest.mark.asyncio
+async def test_super_admin_cannot_grant_trial_over_active_or_provider_subscription(monkeypatch):
+    tenants = MemoryCollection([
+        {"id": "active", "subscription_status": "active"},
+        {"id": "pagbank", "subscription_status": "pending_payment", "pagbank_recurring_link_started": True},
+        {"id": "asaas", "subscription_status": "pending_payment", "asaas_subscription_id": "sub-1"},
+    ])
+    monkeypatch.setattr(superadmin, "db", SimpleNamespace(tenants=tenants))
+
+    for tenant_id in ("active", "pagbank", "asaas"):
+        with pytest.raises(superadmin.HTTPException) as error:
+            await superadmin.grant_tenant_trial(
+                tenant_id,
+                superadmin.GrantTrialIn(days=14),
+            )
+        assert error.value.status_code == 409
+
+
+def test_trial_duration_must_be_between_one_and_3650_days():
+    with pytest.raises(ValueError):
+        superadmin.GrantTrialIn(days=0)
+    with pytest.raises(ValueError):
+        superadmin.GrantTrialIn(days=3651)

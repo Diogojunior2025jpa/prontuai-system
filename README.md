@@ -99,8 +99,13 @@ FastAPI, async throughout. `python` is the app venv interpreter
   Script quota; Google can change quotas. Until both Render and Apps Script are
   configured, password reset messages are not sent; the public endpoint
   intentionally returns a generic response either way.
-  Public clinic registration creates a seven-day trial on the least expensive
-  active plan. For new subscriptions on PagBank Pessoa Física, first create a
+  Public clinic registration creates a fixed seven-day trial on the least
+  expensive active plan; clinic users cannot set, restart, or extend its
+  duration. Only the Super Admin can grant/restart a trial for a non-paying
+  clinic, choosing from 1 to 3,650 days in the clinic actions. Granting is
+  blocked if an Asaas subscription or PagBank recurring checkout is already
+  present, to avoid overlapping charges. For new subscriptions on PagBank
+  Pessoa Física, first create a
   monthly recurring payment link for each plan in the PagBank panel (credit
   card only): in the web panel, open **Menu de Vendas → Link de Pagamentos**,
   create a link, choose **Cobrança recorrente** and monthly frequency, then
