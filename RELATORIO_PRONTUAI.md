@@ -72,7 +72,7 @@
 - Commit `3741ed3` enviado para `origin/main`; a captura enviada pelo usuário
   confirmou o deploy automático concluído.
 
-### Marca e guia financeiro — implementação local, publicação pendente
+### Marca e guia financeiro — publicado; validação de produção pendente
 
 - Integrado um símbolo de marca ProntuAI em ciano/índigo no painel da clínica,
   tela de entrada, página inicial e Super Admin.
@@ -91,10 +91,10 @@
   o guia ficou em chunk próprio (~377 kB). O bundle principal (~653 kB) ainda
   mostra o aviso preexistente de tamanho. Lint passou com um aviso preexistente
   de Fast Refresh em `AppShell.jsx`.
-- Essas alterações ainda estão somente no workspace; não foram publicadas nem
-  implantadas.
+- Commit `2869c6e` enviado para `origin/main`. A conclusão do deploy automático
+  não foi confirmada nesta sessão.
 
-### Integração Asaas — implementação local, requer configuração e teste
+### Integração Asaas — código publicado; configuração e teste pendentes
 
 - Após a escolha do usuário, iniciada a integração de assinaturas mensais com
   checkout do Asaas. O cliente pode escolher a forma de pagamento na fatura
@@ -123,14 +123,15 @@
 
 ## Pendências para continuar amanhã
 
-1. **Configurar e validar Asaas Sandbox:** criar uma conta de testes, configurar
+1. **Configurar e validar Asaas Sandbox:** após confirmar o deploy do commit
+   `2869c6e`, criar uma conta de testes, configurar
    `ASAAS_API_KEY`, `ASAAS_ENV=sandbox` e `ASAAS_WEBHOOK_TOKEN` em ambiente
    privado no Render e registrar o webhook
    `https://<API-Render>/api/webhooks/asaas`. Testar assinatura, pagamento,
    confirmação por webhook e os 5 dias de tolerância; depois escolher o momento
    de trocar para `ASAAS_ENV=production` e a chave real. Nunca envie as chaves
    pela conversa.
-2. **Publicar e testar o guia financeiro e a marca:** conferir a rota
+2. **Confirmar deploy e testar o guia financeiro e a marca:** conferir a rota
    `/app/financeiro` com uma conta que tenha `finance.view`.
 3. **Financeiro completo da clínica:** decidir e implementar cadastro de
    recebimentos, despesas e inadimplência para permitir fluxo de caixa real.
@@ -150,16 +151,11 @@
 
 ## Estado do repositório ao fechar
 
-- A branch publicada termina no commit `9ea3170`. As alterações do guia, marca
-  e integração Asaas estão pendentes de commit/publicação e teste em Sandbox.
-- Alterações locais atuais: endpoint financeiro em
-  `backend/routers/clinic.py`, cliente Asaas em `backend/lib/asaas.py`,
-  webhook em `backend/routers/webhooks.py`, novo include em `backend/server.py`,
-  guarda de acesso em `backend/lib/auth.py`, teste `backend/tests/test_finance_guide.py`,
-  componente de marca `frontend/src/components/BrandMark.jsx`, tela
-  `frontend/src/pages/FinancialGuide.jsx` e integração em `App.jsx`,
-  `AppShell.jsx`, `Home.jsx`, `Login.jsx`, `SuperAdmin.jsx` e
-  `SubscriptionPlans.jsx`.
+- Commit publicado: `2869c6e` (`feat: adiciona guia financeiro e cobranca
+  Asaas`); confirmar deploy automático da Vercel/Render e testar o Sandbox
+  Asaas antes de usar cobrança real.
+- `relatorio_execucao.txt` permanece como a única alteração local não
+  relacionada e não foi incluída no commit.
 - `relatorio_execucao.txt` possui alteração local anterior e foi preservado,
   sem inclusão nos commits desta sequência.
 - Este relatório acompanha o estado publicado do repositório.
