@@ -158,8 +158,9 @@
 
 ## Estado do repositório ao fechar
 
-- Commits publicados: `2869c6e` (funcionalidades) e `4b5ea11` (relatório);
-  alterações posteriores de boas-vindas serão registradas em novo commit.
+- Commit mais recente publicado: `a33aec1` (texto de boas-vindas e relatório).
+- Confirmar o deploy automático da Vercel/Render e testar o Sandbox Asaas antes
+  de usar cobrança real.
 - `relatorio_execucao.txt` possui alteração local anterior e foi preservado,
   sem inclusão nos commits desta sequência.
 - Este relatório acompanha o estado publicado do repositório.
