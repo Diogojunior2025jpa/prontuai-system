@@ -6,7 +6,7 @@ import { useMe } from "@/components/AppShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { apiGet, apiPut } from "@/lib/api";
+import { apiGet, apiPost, apiPut } from "@/lib/api";
 import { brl, PLAN_DESCRIPTIONS } from "@/lib/session";
 
 export default function SubscriptionPlans() {
@@ -20,9 +20,25 @@ export default function SubscriptionPlans() {
     mutationFn: (plan_id) => apiPut("/clinic/subscription/plan", { plan_id }),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["clinic-subscription"] });
-      toast.success(result.subscription_status === "trialing" ? "Plano selecionado para o período de teste" : "Plano selecionado; falta confirmar o pagamento para reativar o acesso");
+      if (result.subscription_status === "trialing") {
+        toast.success("Plano selecionado para o período de teste");
+      } else {
+        checkout.mutate(result.plan.id);
+      }
     },
     onError: (error) => toast.error(error?.body?.detail || "Não foi possível selecionar o plano"),
+  });
+  const checkout = useMutation({
+    mutationFn: (plan_id) => apiPost("/clinic/subscription/checkout", { plan_id }),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["clinic-subscription"] });
+      if (result.invoice_url) {
+        window.location.assign(result.invoice_url);
+      } else {
+        toast.info(result.message || "A cobrança está sendo gerada. Tente novamente em instantes.");
+      }
+    },
+    onError: (error) => toast.error(error?.body?.detail || "Não foi possível gerar a cobrança"),
   });
 
   if (meLoading) return <main className="p-6 text-sm text-slate-400">Verificando acesso…</main>;
@@ -31,8 +47,12 @@ export default function SubscriptionPlans() {
 
   const trialEnds = subscription?.trial_ends_at ? new Date(subscription.trial_ends_at) : null;
   const isTrialing = subscription?.subscription_status === "trialing";
-  const pendingPayment = subscription?.subscription_status === "pending_payment";
+  const pendingPayment = ["pending_payment", "expired"].includes(subscription?.subscription_status);
   const paidActive = (subscription?.subscription_status || "active") === "active";
+  const paymentOverdue = ["overdue", "payment_problem"].includes(subscription?.subscription_payment_status);
+  const graceUntil = subscription?.subscription_grace_until
+    ? new Date(subscription.subscription_grace_until).toLocaleDateString("pt-BR")
+    : null;
 
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-foreground sm:px-6">
@@ -42,14 +62,28 @@ export default function SubscriptionPlans() {
           <div><p className="overline text-cyan-400">Assinatura da clínica</p><h1 className="mt-2 font-heading text-2xl font-semibold">Planos disponíveis</h1><p className="mt-2 text-sm text-slate-400">Escolha o plano que atende à sua clínica.</p></div>
           {isTrialing && trialEnds ? <Badge variant="outline" className="border-emerald-900 text-emerald-300"><Clock3 className="mr-1 size-3" />Teste até {trialEnds.toLocaleDateString("pt-BR")}</Badge> : null}
         </header>
-        {pendingPayment ? <p className="mt-5 rounded-md border border-amber-900 bg-amber-950/30 p-4 text-sm text-amber-200">Seu teste terminou. O plano foi selecionado, mas o pagamento Pix ainda não está conectado; o acesso será reativado após a confirmação da cobrança.</p> : null}
+        {pendingPayment ? <p className="mt-5 rounded-md border border-amber-900 bg-amber-950/30 p-4 text-sm text-amber-200" data-testid="subscription-pending-payment">{paymentOverdue ? `Há uma cobrança do Asaas em atraso. O acesso permanece disponível até ${graceUntil || "o fim do prazo de tolerância"}; regularize para evitar a suspensão.` : "Seu teste terminou. Gere a cobrança mensal pelo Asaas para escolher uma forma de pagamento. O acesso será liberado após a confirmação do pagamento."}{subscription?.pending_plan_change_locked ? " Já existe uma assinatura iniciada para este plano; para alterá-lo, contate o suporte." : ""}</p> : null}
         {plansLoading ? <p className="mt-6 text-sm text-slate-400">Carregando planos…</p> : plans.length ? <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {plans.map((plan) => {
             const selected = subscription?.plan_id === plan.id;
             return <Card key={plan.id} className={`border-[#283443] bg-[#111820] ${selected ? "ring-1 ring-cyan-700" : ""}`} data-testid={`subscription-plan-${plan.id}`}>
               <CardHeader><div className="flex items-start justify-between gap-3"><CardTitle className="font-heading text-lg">{plan.name}</CardTitle>{selected ? <Badge variant="outline" className="border-cyan-900 text-cyan-300">Selecionado</Badge> : null}</div><p className="pt-2 text-sm leading-6 text-slate-400">{PLAN_DESCRIPTIONS[plan.id] || "Organize a rotina da sua clínica com os recursos deste plano."}</p><p className="pt-2 font-mono text-2xl">{brl(plan.price)}<span className="font-sans text-xs text-slate-500"> / mês</span></p></CardHeader>
               <CardContent className="space-y-4"><ul className="space-y-2">{(plan.features || []).map((feature) => <li key={feature} className="flex gap-2 text-sm text-slate-300"><Check className="size-4 shrink-0 text-emerald-400" />{feature}</li>)}<li className="flex gap-2 text-sm text-slate-400"><Check className="size-4 shrink-0 text-emerald-400" />Até {plan.max_users} usuários</li><li className="flex gap-2 text-sm text-slate-400"><Check className="size-4 shrink-0 text-emerald-400" />Até {plan.max_patients} pacientes</li></ul>
-                <Button className="w-full" variant={selected || paidActive ? "outline" : "default"} disabled={selectPlan.isPending || selected || paidActive} onClick={() => selectPlan.mutate(plan.id)} data-testid={`select-plan-${plan.id}`}>{selected ? "Plano atual" : paidActive ? "Plano ativo" : selectPlan.isPending ? "Salvando…" : isTrialing ? "Usar no teste" : "Selecionar plano"}</Button>
+                <Button
+                  className="w-full"
+                  variant={selected || paidActive ? "outline" : "default"}
+                  disabled={selectPlan.isPending || checkout.isPending || (selected && !pendingPayment) || (subscription?.pending_plan_change_locked && !selected) || paidActive}
+                  onClick={() => {
+                    if (pendingPayment && selected) {
+                      checkout.mutate(plan.id);
+                    } else {
+                      selectPlan.mutate(plan.id);
+                    }
+                  }}
+                  data-testid={`select-plan-${plan.id}`}
+                >
+                  {checkout.isPending ? "Gerando cobrança…" : pendingPayment && selected ? "Gerar cobrança Asaas" : selected ? "Plano atual" : paidActive ? "Plano ativo" : selectPlan.isPending ? "Salvando…" : isTrialing ? "Usar no teste" : "Selecionar plano"}
+                </Button>
               </CardContent>
             </Card>;
           })}

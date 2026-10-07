@@ -74,7 +74,9 @@ FastAPI, async throughout. `python` is the app venv interpreter
   clinical structuring), `GEMINI_API_KEY` (aggregate-only Super Admin reports),
   `APP_SECRET_ENCRYPTION_KEY` (Fernet key used to encrypt keys saved
   from the Super Admin panel), and optional `GEMINI_MODEL` (defaults to
-  `gemini-2.5-flash`). In development only, if no master key is configured, the app creates one
+  `gemini-2.5-flash`), `ASAAS_API_KEY`, `ASAAS_ENV` (`sandbox` by default;
+  set to `production` only after sandbox validation), and `ASAAS_WEBHOOK_TOKEN`.
+  In development only, if no master key is configured, the app creates one
   in `backend/.api_key_encryption.key` with owner-only permissions. Back up
   that file securely; losing it makes locally stored keys unrecoverable. In
   production, provide `APP_SECRET_ENCRYPTION_KEY` through the deployment secret
@@ -97,9 +99,18 @@ FastAPI, async throughout. `python` is the app venv interpreter
   configured, password reset messages are not sent; the public endpoint
   intentionally returns a generic response either way.
   Public clinic registration creates a seven-day trial on the least expensive
-  active plan. Plan selection after expiry is recorded as `pending_payment`;
-  no Pix charge is created or marked paid because a payment provider has not
-  been configured.
+  active plan. After trial expiry, a clinic administrator can create a monthly
+  Asaas subscription with billing type `UNDEFINED` and continue on Asaas's
+  hosted invoice page to choose an enabled payment method. The API credential
+  must match `ASAAS_ENV`; its authentication header is `access_token`. Register
+  an Asaas webhook at `https://<render-api>/api/webhooks/asaas`, configure the
+  same secret as `ASAAS_WEBHOOK_TOKEN` in Render and as the webhook's
+  authentication token in Asaas, and subscribe to payment confirmation,
+  receipt, overdue, refund, and chargeback events. The webhook activates a
+  subscription only after a payment confirmation/receipt. Overdue or reversed
+  payments receive a five-day access grace period. Do not set production
+  credentials until the Sandbox checkout and webhook flow have been tested.
+  Never paste payment secrets into source code, logs, commits, or chat.
 - **Dates**: `backend/lib/dates.py` — `today_iso(tz=None)`. The pod clock is
   UTC; anchor "today" server-side with this, never with client-side date math.
 - **Interactive check**: `cd /app/backend && python -c 'import server'` catches

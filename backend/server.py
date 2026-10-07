@@ -19,6 +19,7 @@ from routers.auth import router as auth_router  # noqa: E402
 from routers.clinic import router as clinic_router  # noqa: E402
 from routers.portal import router as portal_router  # noqa: E402
 from routers.superadmin import router as admin_router  # noqa: E402
+from routers.webhooks import router as webhooks_router  # noqa: E402
 
 
 @asynccontextmanager
@@ -45,6 +46,7 @@ api_router.include_router(availability_router)
 api_router.include_router(ai_router)
 api_router.include_router(assistant_router)
 api_router.include_router(portal_router)
+api_router.include_router(webhooks_router)
 
 app.add_middleware(
     CORSMiddleware,

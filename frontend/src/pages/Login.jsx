@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useLocation, useNavigate, Link } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
-import { Activity, Lock, ShieldCheck } from "lucide-react";
+import { Lock, ShieldCheck } from "lucide-react";
 import { apiPost } from "@/lib/api";
+import BrandMark from "@/components/BrandMark";
 import { beginSession } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,7 +35,7 @@ export default function Login() {
     <div className="min-h-screen grid lg:grid-cols-[1.1fr_1fr] bg-background text-foreground">
       <div className="hidden lg:flex flex-col justify-between p-12 border-r border-[#1E293B] bg-[#070B11]">
         <div className="flex items-center gap-2">
-          <Activity className="size-6 text-indigo-400" />
+          <BrandMark className="size-8" />
           <span className="font-heading text-xl font-semibold tracking-tight">ProntuAI</span>
         </div>
         <div className="max-w-md">

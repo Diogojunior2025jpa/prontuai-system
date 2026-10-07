@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { apiGet } from "@/lib/api";
+import BrandMark from "@/components/BrandMark";
 import { buttonVariants } from "@/components/ui/button";
 import { PLAN_DESCRIPTIONS, brl } from "@/lib/session";
 
@@ -90,7 +91,7 @@ export default function Home() {
         <div className="mx-auto flex h-[68px] max-w-7xl items-center justify-between px-5 sm:px-8">
           <Link to="/" className="flex items-center gap-2.5" aria-label="ProntuAI, início">
             <span className="flex size-9 items-center justify-center rounded-xl border border-violet-300/20 bg-violet-500/10 text-violet-300 shadow-lg shadow-violet-900/20">
-              <Activity className="size-5" />
+              <BrandMark className="size-6" />
             </span>
             <span className="font-heading text-lg font-semibold tracking-tight">Prontu<span className="text-violet-300">AI</span></span>
           </Link>

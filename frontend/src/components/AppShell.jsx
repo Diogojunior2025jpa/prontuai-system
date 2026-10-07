@@ -1,10 +1,11 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Activity, Bell, Calendar, CreditCard, FileText, LayoutDashboard, LogOut, Megaphone, ShieldCheck, Stethoscope, Users, UsersRound,
+  Bell, Calendar, CreditCard, FileText, LayoutDashboard, LogOut, Megaphone, ShieldCheck, Stethoscope, Users, UsersRound,
 } from "lucide-react";
 import { apiGet } from "@/lib/api";
 import AssistantWidget from "@/components/AssistantWidget";
+import BrandMark from "@/components/BrandMark";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ROLE_LABELS, SPECIALTY_LABELS, endSession, hasPerm } from "@/lib/session";
@@ -27,6 +28,7 @@ const NAV = [
   { to: "/app/laudos", label: "Laudos Médicos", icon: FileText, perm: "records.view" },
   { to: "/app/equipe", label: "Equipe & Permissões", icon: UsersRound, perm: "team.manage" },
   { to: "/app/campanhas", label: "Marketing", icon: Megaphone, perm: "campaigns.send" },
+  { to: "/app/financeiro", label: "Guia financeiro", icon: CreditCard, perm: "finance.view" },
   { to: "/app/plano", label: "Plano", icon: CreditCard, perm: null, roles: ["clinic_admin"] },
 ];
 
@@ -55,7 +57,7 @@ export default function AppShell({ children, title, subtitle, actions }) {
         data-testid="app-sidebar"
       >
         <div className="h-16 flex items-center gap-2 px-5 border-b border-[#1E293B]">
-          <Activity className="size-5 text-indigo-400" />
+          <BrandMark className="size-7 shrink-0" />
           <span className="font-heading font-semibold tracking-tight text-lg">ProntuAI</span>
         </div>
 

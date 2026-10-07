@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Ban, Building2, CheckCircle2, LogOut, Pencil, Plus, TrendingUp, Users } from "lucide-react";
+import { Ban, Building2, CheckCircle2, LogOut, Pencil, Plus, TrendingUp, Users } from "lucide-react";
 import { toast } from "sonner";
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/lib/api";
+import BrandMark from "@/components/BrandMark";
 import AssistantWidget from "@/components/AssistantWidget";
 import GlobalAssistantPanel from "@/components/admin/GlobalAssistantPanel";
 import ApiKeySettingsPanel from "@/components/admin/ApiKeySettingsPanel";
@@ -197,7 +198,7 @@ export default function SuperAdmin() {
     <div className="min-h-screen bg-background text-foreground">
       <header className="h-16 flex items-center justify-between px-6 border-b border-[#1E293B] bg-[#070B11] sticky top-0 z-20">
         <div className="flex items-center gap-3">
-          <Activity className="size-5 text-indigo-400" />
+          <BrandMark className="size-7 shrink-0" />
           <div>
             <p className="font-heading font-semibold tracking-tight">ProntuAI · Super Admin</p>
             <p className="text-[11px] text-slate-500">{me?.user?.name || "—"} · plataforma</p>

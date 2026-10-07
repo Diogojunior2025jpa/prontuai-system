@@ -138,12 +138,32 @@ async def require_tenant_user(user: dict = Depends(current_user)) -> dict:
     """A staff member bound to exactly one clinic. Super Admin has no clinic data."""
     if user["role"] == "super_admin" or not user.get("tenant_id"):
         raise HTTPException(status_code=403, detail="Rota exclusiva de usuários de clínica")
-    tenant = await db.tenants.find_one({"id": user["tenant_id"]}, {"_id": 0, "subscription_status": 1, "trial_ends_at": 1})
+    tenant = await db.tenants.find_one(
+        {"id": user["tenant_id"]},
+        {
+            "_id": 0,
+            "subscription_status": 1,
+            "trial_ends_at": 1,
+            "subscription_grace_until": 1,
+        },
+    )
+    now = datetime.now(timezone.utc)
+    grace_until = tenant.get("subscription_grace_until") if tenant else None
+    if grace_until:
+        if grace_until.tzinfo is None:
+            grace_until = grace_until.replace(tzinfo=timezone.utc)
+        if grace_until > now:
+            return user
+    if tenant and tenant.get("subscription_status") == "pending_payment":
+        raise HTTPException(
+            status_code=402,
+            detail="Pagamento pendente. Regularize a assinatura no painel do plano.",
+        )
     trial_ends_at = tenant.get("trial_ends_at") if tenant else None
     if trial_ends_at and tenant.get("subscription_status") != "active":
         if trial_ends_at.tzinfo is None:
             trial_ends_at = trial_ends_at.replace(tzinfo=timezone.utc)
-        if trial_ends_at <= datetime.now(timezone.utc):
+        if trial_ends_at <= now:
             raise HTTPException(
                 status_code=402,
                 detail="Seu período de teste terminou. Escolha um plano para reativar o acesso.",

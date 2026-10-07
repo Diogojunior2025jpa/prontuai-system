@@ -1,10 +1,11 @@
 """All clinic-scoped resources. Every query is built from tenant_filter(user)."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from lib.auth import PERMISSIONS, ROLE_DEFAULTS, current_user, effective_permissions, hash_password, public_user, require_perm, require_tenant_user, tenant_filter
+from lib.asaas import AsaasApiError, AsaasNotConfigured, create_asaas_checkout, get_asaas_invoice_url
 from lib.dates import today_iso
 from lib.db import db
 from models.schemas import (
@@ -49,6 +50,9 @@ async def get_subscription(user: dict = Depends(current_user)):
         "plan_id": tenant.get("plan_id"),
         "subscription_status": subscription_status,
         "trial_ends_at": trial_ends_at,
+        "subscription_payment_status": tenant.get("subscription_payment_status"),
+        "subscription_grace_until": tenant.get("subscription_grace_until"),
+        "pending_plan_change_locked": bool(tenant.get("asaas_subscription_id")),
     }
 
 
@@ -64,6 +68,14 @@ async def select_subscription_plan(payload: SelectPlanIn, user: dict = Depends(c
     plan = await db.plans.find_one({"id": payload.plan_id, "active": True}, {"_id": 0})
     if not plan:
         raise HTTPException(status_code=404, detail="Plano não encontrado")
+    if (
+        tenant.get("asaas_subscription_id")
+        and tenant.get("asaas_plan_id") != plan["id"]
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Já existe uma assinatura pendente para outro plano. Contate o suporte para alterá-la.",
+        )
 
     trial_ends_at = tenant.get("trial_ends_at")
     deadline = trial_ends_at
@@ -80,6 +92,124 @@ async def select_subscription_plan(payload: SelectPlanIn, user: dict = Depends(c
         }},
     )
     return {"plan": plan, "subscription_status": subscription_status, "trial_ends_at": trial_ends_at}
+
+
+@router.post("/subscription/checkout")
+async def subscription_checkout(payload: SelectPlanIn, user: dict = Depends(current_user)):
+    if user.get("role") != "clinic_admin" or not user.get("tenant_id"):
+        raise HTTPException(status_code=403, detail="Somente o administrador da clínica pode iniciar o pagamento")
+    tenant = await db.tenants.find_one({"id": user["tenant_id"]}, {"_id": 0})
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Clínica não encontrada")
+    if tenant.get("subscription_status", "active") == "active":
+        raise HTTPException(status_code=409, detail="A assinatura já está ativa")
+    if tenant.get("selected_plan_id") != payload.plan_id:
+        raise HTTPException(status_code=409, detail="Selecione o plano antes de iniciar o pagamento")
+
+    plan = await db.plans.find_one({"id": payload.plan_id, "active": True}, {"_id": 0})
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plano não encontrado")
+    if plan["price"] <= 0:
+        raise HTTPException(status_code=422, detail="O plano selecionado não possui cobrança")
+
+    existing_subscription = tenant.get("asaas_subscription_id")
+    if existing_subscription:
+        if tenant.get("asaas_plan_id") != plan["id"]:
+            raise HTTPException(
+                status_code=409,
+                detail="Já existe uma assinatura pendente para outro plano. Contate o suporte para alterá-la.",
+            )
+        invoice_url = tenant.get("asaas_checkout_url")
+        if not invoice_url:
+            try:
+                invoice_url = await get_asaas_invoice_url(existing_subscription)
+            except AsaasNotConfigured as exc:
+                raise HTTPException(status_code=503, detail="A integração Asaas não está configurada") from exc
+            except AsaasApiError as exc:
+                raise HTTPException(status_code=502, detail="Não foi possível consultar a cobrança no Asaas") from exc
+            if invoice_url:
+                await db.tenants.update_one(
+                    {"id": tenant["id"], "asaas_subscription_id": existing_subscription},
+                    {"$set": {"asaas_checkout_url": invoice_url}},
+                )
+        return {
+            "subscription_status": tenant.get("subscription_status"),
+            "invoice_url": invoice_url,
+            "message": None if invoice_url else "A cobrança está sendo gerada. Tente novamente em instantes.",
+        }
+
+    admins = await db.users.find(
+        {"tenant_id": tenant["id"], "role": "clinic_admin", "active": {"$ne": False}},
+        {"_id": 0, "id": 1, "name": 1, "email": 1},
+    ).sort("created_at", 1).to_list(1)
+    if not admins:
+        raise HTTPException(status_code=409, detail="Clínica sem administrador principal")
+    lock_id = new_id()
+    lock_now = utcnow()
+    lock = await db.tenants.update_one(
+        {
+            "id": tenant["id"],
+            "subscription_status": {"$ne": "active"},
+            "asaas_subscription_id": {"$exists": False},
+            "$or": [
+                {"asaas_checkout_lock_until": {"$lt": lock_now}},
+                {"asaas_checkout_lock_until": {"$exists": False}},
+            ],
+        },
+        {
+            "$set": {
+                "asaas_checkout_lock_id": lock_id,
+                "asaas_checkout_lock_until": lock_now + timedelta(minutes=3),
+            }
+        },
+    )
+    if not lock.matched_count:
+        raise HTTPException(
+            status_code=409,
+            detail="A cobrança já está sendo preparada. Aguarde um instante e tente novamente.",
+        )
+    try:
+        try:
+            checkout = await create_asaas_checkout(tenant, admins[0], plan)
+        except AsaasNotConfigured as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="Configure ASAAS_API_KEY, ASAAS_ENV e ASAAS_WEBHOOK_TOKEN no Render para gerar cobranças",
+            ) from exc
+        except AsaasApiError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail="Não foi possível gerar a cobrança no Asaas. Tente novamente.",
+            ) from exc
+
+        result = await db.tenants.update_one(
+            {"id": tenant["id"], "asaas_checkout_lock_id": lock_id},
+            {
+                "$set": {
+                    "plan_id": plan["id"],
+                    "selected_plan_id": plan["id"],
+                    "subscription_status": "pending_payment",
+                    "subscription_payment_status": "awaiting_payment",
+                    "subscription_payment_due_date": checkout["due_date"],
+                    "asaas_customer_id": checkout["customer_id"],
+                    "asaas_subscription_id": checkout["subscription_id"],
+                    "asaas_plan_id": plan["id"],
+                    "asaas_checkout_url": checkout["invoice_url"],
+                }
+            },
+        )
+        if not result.matched_count:
+            raise HTTPException(status_code=500, detail="Não foi possível salvar a assinatura da clínica")
+    finally:
+        await db.tenants.update_one(
+            {"id": tenant["id"], "asaas_checkout_lock_id": lock_id},
+            {"$unset": {"asaas_checkout_lock_id": "", "asaas_checkout_lock_until": ""}},
+        )
+    return {
+        "subscription_status": "pending_payment",
+        "invoice_url": checkout["invoice_url"],
+        "message": None if checkout["invoice_url"] else "A cobrança está sendo gerada. Tente novamente em instantes.",
+    }
 
 
 @router.get("/notices", response_model=list[NoticeOut])
@@ -124,6 +254,86 @@ async def overview(user: dict = Depends(require_tenant_user)):
         "revenue_month": round(revenue, 2),
         "records_total": await db.records.count_documents(tenant_filter(user)),
         "agenda_today": appts_today,
+    }
+
+
+@router.get("/finance/overview")
+async def finance_overview(user: dict = Depends(require_perm("finance.view"))):
+    current_month = date.fromisoformat(today_iso()).replace(day=1)
+    first_month_index = current_month.year * 12 + current_month.month - 1 - 5
+    first_month = date(first_month_index // 12, first_month_index % 12 + 1, 1)
+    next_month = (current_month + timedelta(days=32)).replace(day=1)
+    last_day = next_month - timedelta(days=1)
+
+    pipeline = [
+        {
+            "$match": tenant_filter(
+                user,
+                {"date": {"$gte": first_month.isoformat(), "$lte": last_day.isoformat()}},
+            )
+        },
+        {
+            "$group": {
+                "_id": {
+                    "month": {"$substrBytes": ["$date", 0, 7]},
+                    "status": "$status",
+                },
+                "value": {"$sum": {"$ifNull": ["$price", 0]}},
+                "count": {"$sum": 1},
+            }
+        },
+    ]
+    grouped = await db.appointments.aggregate(pipeline).to_list(length=None)
+
+    month_values = {}
+    month_labels = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"]
+    for offset in range(6):
+        month_index = first_month.year * 12 + first_month.month - 1 + offset
+        month = date(month_index // 12, month_index % 12 + 1, 1)
+        month_key = month.strftime("%Y-%m")
+        month_values[month_key] = {
+            "month": month_key,
+            "label": month_labels[month.month - 1],
+            "completed_value": 0.0,
+            "scheduled_value": 0.0,
+            "completed_count": 0,
+            "scheduled_count": 0,
+            "cancelled_count": 0,
+        }
+
+    for row in grouped:
+        month_key = row["_id"]["month"]
+        month = month_values.get(month_key)
+        if not month:
+            continue
+        status = row["_id"]["status"]
+        if status == "done":
+            month["completed_value"] = round(float(row["value"]), 2)
+            month["completed_count"] = row["count"]
+        elif status == "scheduled":
+            month["scheduled_value"] = round(float(row["value"]), 2)
+            month["scheduled_count"] = row["count"]
+        elif status == "cancelled":
+            month["cancelled_count"] = row["count"]
+
+    months = list(month_values.values())
+    current = months[-1]
+    previous = months[-2]
+    previous_value = previous["completed_value"]
+    change_percent = (
+        round((current["completed_value"] - previous_value) / previous_value * 100, 1)
+        if previous_value
+        else None
+    )
+    return {
+        "months": months,
+        "current_month": current,
+        "completed_change_percent": change_percent,
+        "currency": "BRL",
+        "data_note": (
+            "Valores calculados pelos preços cadastrados em consultas concluídas "
+            "ou agendadas; não representam pagamentos confirmados, despesas ou inadimplência."
+        ),
     }
 
 

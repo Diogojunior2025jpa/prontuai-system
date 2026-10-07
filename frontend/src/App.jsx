@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Routes, Route } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import Home from "@/pages/Home";
@@ -18,6 +19,8 @@ import SuperAdmin from "@/pages/SuperAdmin";
 import PortalLogin from "@/pages/PortalLogin";
 import PatientPortal from "@/pages/PatientPortal";
 
+const FinancialGuide = lazy(() => import("@/pages/FinancialGuide"));
+
 // One <Route> per page in src/pages; BrowserRouter already wraps this in main.jsx.
 export default function App() {
   return (
@@ -37,6 +40,14 @@ export default function App() {
         <Route path="/app/laudos" element={<MedicalReports />} />
         <Route path="/app/equipe" element={<Team />} />
         <Route path="/app/campanhas" element={<Campaigns />} />
+        <Route
+          path="/app/financeiro"
+          element={
+            <Suspense fallback={<main className="p-6 text-sm text-slate-400">Carregando guia financeiro…</main>}>
+              <FinancialGuide />
+            </Suspense>
+          }
+        />
         <Route path="/superadmin" element={<SuperAdmin />} />
         <Route path="/portal/login" element={<PortalLogin />} />
         <Route path="/portal" element={<PatientPortal />} />

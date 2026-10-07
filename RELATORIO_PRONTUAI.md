@@ -1,6 +1,6 @@
 # Relatório de andamento do ProntuAI
 
-**Atualizado em:** 06/10/2026
+**Atualizado em:** 07/10/2026
 
 ## Resumo
 
@@ -8,8 +8,8 @@
 - A API pública respondeu HTTP 200 na última verificação.
 - A recuperação de senha por Gmail via Google Apps Script foi configurada e
   testada com sucesso: o e-mail chegou à caixa de entrada.
-- A branch `main` local está sincronizada com `origin/main`, no commit
-  `2c74ba3` (`feat: simplifica recuperação com Apps Script`).
+- Último commit publicado antes deste trabalho: `9ea3170`
+  (`docs: atualiza relatorio de andamento`).
 - Não há credenciais, tokens ou valores de segredos registrados neste arquivo.
 
 ## Trabalho concluído e publicado
@@ -54,7 +54,7 @@
   pelo Google (100 destinatários/dia no momento da verificação; sujeito a
   mudanças).
 
-### Controles de laudos médicos — publicado no GitHub; deploy pendente de confirmação
+### Controles de laudos médicos — publicado e implantado
 
 - Adicionados controles de editar e excluir na lista de laudos para
   profissionais e administradores da clínica que tenham a permissão
@@ -69,9 +69,47 @@
 - Validação local: suíte completa do backend (**30 testes passaram**), lint e
   build do frontend passaram. O build continua mostrando o aviso já conhecido
   de bundle JavaScript acima de 500 kB.
-- Commit `3741ed3` enviado para `origin/main`. A conclusão dos deploys não foi
-  confirmada nesta sessão; conferir os painéis da Vercel e do Render antes de
-  testar a funcionalidade em produção.
+- Commit `3741ed3` enviado para `origin/main`; a captura enviada pelo usuário
+  confirmou o deploy automático concluído.
+
+### Marca e guia financeiro — implementação local, publicação pendente
+
+- Integrado um símbolo de marca ProntuAI em ciano/índigo no painel da clínica,
+  tela de entrada, página inicial e Super Admin.
+- Criada a rota **Guia financeiro**, visível a quem possui `finance.view`, com
+  indicadores mensais, gráfico comparativo dos últimos seis meses e
+  observações automáticas de tendência e agenda.
+- A API agrega consultas dentro do tenant autenticado e aceita os estados
+  `done`, `scheduled` e `cancelled`. O guia identifica valores de consultas
+  concluídas como estimativas pelo preço cadastrado e valores agendados como
+  potencial, nunca como pagamento recebido.
+- O sistema ainda não registra conciliação de pagamentos, despesas ou
+  inadimplência. Esses números não são fabricados/exibidos como se existissem.
+- A tela financeira é carregada sob demanda para não aumentar o bundle inicial.
+- Suíte completa do backend após as alterações atuais: **40 testes passaram**.
+  Build frontend passou;
+  o guia ficou em chunk próprio (~377 kB). O bundle principal (~653 kB) ainda
+  mostra o aviso preexistente de tamanho. Lint passou com um aviso preexistente
+  de Fast Refresh em `AppShell.jsx`.
+- Essas alterações ainda estão somente no workspace; não foram publicadas nem
+  implantadas.
+
+### Integração Asaas — implementação local, requer configuração e teste
+
+- Após a escolha do usuário, iniciada a integração de assinaturas mensais com
+  checkout do Asaas. O cliente pode escolher a forma de pagamento na fatura
+  hospedada pelo Asaas.
+- A API usa sandbox por padrão e produção somente quando `ASAAS_ENV=production`.
+  A chave `ASAAS_API_KEY` é lida apenas do ambiente; nunca gravada no código.
+- O webhook autenticado em `/api/webhooks/asaas` processa confirmações,
+  recebimentos, atrasos e estornos/chargebacks. Acesso fica pendente até a
+  confirmação de pagamento; atraso tem **5 dias de tolerância**, conforme
+  escolha do usuário.
+- Suíte do backend: **40 testes passaram**, incluindo criação de assinatura
+  mockada, verificação do token de webhook e período de tolerância. O fluxo
+  ainda não foi testado com uma conta Sandbox real.
+  São necessárias as variáveis `ASAAS_API_KEY`, `ASAAS_ENV` e
+  `ASAAS_WEBHOOK_TOKEN` no Render e a configuração do webhook no painel Asaas.
 
 ## Sistemas e serviços usados
 
@@ -85,32 +123,43 @@
 
 ## Pendências para continuar amanhã
 
-1. **Deploy dos laudos:** conferir se Vercel e Render concluíram os deploys do
-   commit `3741ed3`. Depois, testar em produção a edição e o arquivamento de
-   um laudo, incluindo acesso com os papéis autorizados.
-2. **Cofre de chaves de IA:** confirmar no Render que
+1. **Configurar e validar Asaas Sandbox:** criar uma conta de testes, configurar
+   `ASAAS_API_KEY`, `ASAAS_ENV=sandbox` e `ASAAS_WEBHOOK_TOKEN` em ambiente
+   privado no Render e registrar o webhook
+   `https://<API-Render>/api/webhooks/asaas`. Testar assinatura, pagamento,
+   confirmação por webhook e os 5 dias de tolerância; depois escolher o momento
+   de trocar para `ASAAS_ENV=production` e a chave real. Nunca envie as chaves
+   pela conversa.
+2. **Publicar e testar o guia financeiro e a marca:** conferir a rota
+   `/app/financeiro` com uma conta que tenha `finance.view`.
+3. **Financeiro completo da clínica:** decidir e implementar cadastro de
+   recebimentos, despesas e inadimplência para permitir fluxo de caixa real.
+   Até lá, o novo guia mostra apenas valores estimados das consultas.
+4. **Cofre de chaves de IA:** confirmar no Render que
    `APP_SECRET_ENCRYPTION_KEY` está definido e estável; verificar no Super
    Admin se o cofre está disponível e se as integrações Groq/Gemini estão
    ativas. Se alguma credencial foi exposta anteriormente, revogá-la e criar
    outra. Nunca registrar chaves neste relatório.
-3. **MongoDB Atlas e bootstrap:** confirmar que o backend de produção conecta ao
+5. **MongoDB Atlas e bootstrap:** confirmar que o backend de produção conecta ao
    Atlas e validar o fluxo de criação/recuperação de acesso do administrador.
    A existência e conexão foram pendências de relatórios anteriores e não foram
    revalidadas nesta sessão.
-4. **Assinaturas e cobrança:** a seleção de plano após o período de teste fica
-   como `pending_payment`; não há provedor Pix/cartão conectado. Confirmar se
-   isso faz parte do escopo da próxima publicação.
-5. **Recuperação de senha:** o envio foi confirmado. Em caso de futura falha,
+6. **Recuperação de senha:** o envio foi confirmado. Em caso de futura falha,
    verificar primeiro as execuções do Apps Script e os logs do Render. Manter
    a URL do Web App e o segredo fora do código, commits, capturas e conversas.
 
 ## Estado do repositório ao fechar
 
-- A implementação de laudos foi publicada no commit `3741ed3`, sincronizado
-  com `origin/main`; deploy em produção ainda sem confirmação.
-- Foram alterados `backend/routers/clinic.py` e
-  `frontend/src/pages/MedicalReports.jsx`; foi criado
-  `backend/tests/test_medical_records.py`.
+- A branch publicada termina no commit `9ea3170`. As alterações do guia, marca
+  e integração Asaas estão pendentes de commit/publicação e teste em Sandbox.
+- Alterações locais atuais: endpoint financeiro em
+  `backend/routers/clinic.py`, cliente Asaas em `backend/lib/asaas.py`,
+  webhook em `backend/routers/webhooks.py`, novo include em `backend/server.py`,
+  guarda de acesso em `backend/lib/auth.py`, teste `backend/tests/test_finance_guide.py`,
+  componente de marca `frontend/src/components/BrandMark.jsx`, tela
+  `frontend/src/pages/FinancialGuide.jsx` e integração em `App.jsx`,
+  `AppShell.jsx`, `Home.jsx`, `Login.jsx`, `SuperAdmin.jsx` e
+  `SubscriptionPlans.jsx`.
 - `relatorio_execucao.txt` possui alteração local anterior e foi preservado,
   sem inclusão nos commits desta sequência.
 - Este relatório acompanha o estado publicado do repositório.
