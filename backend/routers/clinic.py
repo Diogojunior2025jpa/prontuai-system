@@ -1,11 +1,12 @@
 """All clinic-scoped resources. Every query is built from tenant_filter(user)."""
 
 from datetime import date, datetime, timedelta, timezone
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from lib.auth import PERMISSIONS, ROLE_DEFAULTS, current_user, effective_permissions, hash_password, public_user, require_perm, require_tenant_user, tenant_filter
-from lib.asaas import AsaasApiError, AsaasNotConfigured, create_asaas_checkout, get_asaas_invoice_url
+from lib.asaas import AsaasApiError, AsaasNotConfigured, get_asaas_invoice_url
 from lib.dates import today_iso
 from lib.db import db
 from models.schemas import (
@@ -52,7 +53,11 @@ async def get_subscription(user: dict = Depends(current_user)):
         "trial_ends_at": trial_ends_at,
         "subscription_payment_status": tenant.get("subscription_payment_status"),
         "subscription_grace_until": tenant.get("subscription_grace_until"),
-        "pending_plan_change_locked": bool(tenant.get("asaas_subscription_id")),
+        "pending_plan_change_locked": bool(
+            tenant.get("asaas_subscription_id")
+            or tenant.get("pagbank_recurring_link_started")
+        ),
+        "pagbank_recurring_link_started": bool(tenant.get("pagbank_recurring_link_started")),
     }
 
 
@@ -76,6 +81,14 @@ async def select_subscription_plan(payload: SelectPlanIn, user: dict = Depends(c
             status_code=409,
             detail="Já existe uma assinatura pendente para outro plano. Contate o suporte para alterá-la.",
         )
+    if (
+        tenant.get("pagbank_recurring_link_started")
+        and tenant.get("pagbank_plan_id") != plan["id"]
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Já existe uma tentativa de assinatura PagBank para outro plano. Contate o suporte.",
+        )
 
     trial_ends_at = tenant.get("trial_ends_at")
     deadline = trial_ends_at
@@ -83,14 +96,23 @@ async def select_subscription_plan(payload: SelectPlanIn, user: dict = Depends(c
         deadline = deadline.replace(tzinfo=timezone.utc)
     trial_active = bool(deadline and deadline > datetime.now(timezone.utc))
     subscription_status = "trialing" if trial_active else "pending_payment"
-    await db.tenants.update_one(
-        {"id": tenant["id"]},
+    result = await db.tenants.update_one(
+        {
+            "id": tenant["id"],
+            "subscription_status": {"$ne": "active"},
+            "pagbank_recurring_link_started": {"$ne": True},
+        },
         {"$set": {
             "plan_id": plan["id"],
             "selected_plan_id": plan["id"],
             "subscription_status": subscription_status,
         }},
     )
+    if not result.matched_count:
+        raise HTTPException(
+            status_code=409,
+            detail="A assinatura foi iniciada ou alterada. Atualize a página antes de continuar.",
+        )
     return {"plan": plan, "subscription_status": subscription_status, "trial_ends_at": trial_ends_at}
 
 
@@ -134,81 +156,60 @@ async def subscription_checkout(payload: SelectPlanIn, user: dict = Depends(curr
                 )
         return {
             "subscription_status": tenant.get("subscription_status"),
-            "invoice_url": invoice_url,
+            "payment_url": invoice_url,
             "message": None if invoice_url else "A cobrança está sendo gerada. Tente novamente em instantes.",
         }
 
-    admins = await db.users.find(
-        {"tenant_id": tenant["id"], "role": "clinic_admin", "active": {"$ne": False}},
-        {"_id": 0, "id": 1, "name": 1, "email": 1},
-    ).sort("created_at", 1).to_list(1)
-    if not admins:
-        raise HTTPException(status_code=409, detail="Clínica sem administrador principal")
-    lock_id = new_id()
-    lock_now = utcnow()
-    lock = await db.tenants.update_one(
+    if tenant.get("pagbank_recurring_link_started"):
+        raise HTTPException(
+            status_code=409,
+            detail="Já existe uma tentativa de assinatura em andamento. Aguarde a conferência do PagBank antes de tentar novamente.",
+        )
+    payment_url = plan.get("pagbank_recurring_url")
+    try:
+        parsed_url = urlsplit(payment_url or "")
+    except ValueError:
+        parsed_url = None
+    if (
+        not parsed_url
+        or parsed_url.scheme != "https"
+        or not parsed_url.netloc
+        or parsed_url.username
+        or parsed_url.password
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="O link recorrente PagBank deste plano ainda não foi configurado no Super Admin.",
+        )
+
+    result = await db.tenants.update_one(
         {
             "id": tenant["id"],
             "subscription_status": {"$ne": "active"},
-            "asaas_subscription_id": {"$exists": False},
-            "$or": [
-                {"asaas_checkout_lock_until": {"$lt": lock_now}},
-                {"asaas_checkout_lock_until": {"$exists": False}},
-            ],
+            "selected_plan_id": plan["id"],
+            "pagbank_recurring_link_started": {"$ne": True},
         },
         {
             "$set": {
-                "asaas_checkout_lock_id": lock_id,
-                "asaas_checkout_lock_until": lock_now + timedelta(minutes=3),
+                "plan_id": plan["id"],
+                "selected_plan_id": plan["id"],
+                "subscription_status": "pending_payment",
+                "subscription_payment_status": "awaiting_manual_confirmation",
+                "pagbank_plan_id": plan["id"],
+                "pagbank_payment_link": payment_url,
+                "pagbank_recurring_link_started": True,
             }
         },
     )
-    if not lock.matched_count:
+    if not result.matched_count:
         raise HTTPException(
             status_code=409,
-            detail="A cobrança já está sendo preparada. Aguarde um instante e tente novamente.",
-        )
-    try:
-        try:
-            checkout = await create_asaas_checkout(tenant, admins[0], plan)
-        except AsaasNotConfigured as exc:
-            raise HTTPException(
-                status_code=503,
-                detail="Configure ASAAS_API_KEY, ASAAS_ENV e ASAAS_WEBHOOK_TOKEN no Render para gerar cobranças",
-            ) from exc
-        except AsaasApiError as exc:
-            raise HTTPException(
-                status_code=502,
-                detail="Não foi possível gerar a cobrança no Asaas. Tente novamente.",
-            ) from exc
-
-        result = await db.tenants.update_one(
-            {"id": tenant["id"], "asaas_checkout_lock_id": lock_id},
-            {
-                "$set": {
-                    "plan_id": plan["id"],
-                    "selected_plan_id": plan["id"],
-                    "subscription_status": "pending_payment",
-                    "subscription_payment_status": "awaiting_payment",
-                    "subscription_payment_due_date": checkout["due_date"],
-                    "asaas_customer_id": checkout["customer_id"],
-                    "asaas_subscription_id": checkout["subscription_id"],
-                    "asaas_plan_id": plan["id"],
-                    "asaas_checkout_url": checkout["invoice_url"],
-                }
-            },
-        )
-        if not result.matched_count:
-            raise HTTPException(status_code=500, detail="Não foi possível salvar a assinatura da clínica")
-    finally:
-        await db.tenants.update_one(
-            {"id": tenant["id"], "asaas_checkout_lock_id": lock_id},
-            {"$unset": {"asaas_checkout_lock_id": "", "asaas_checkout_lock_until": ""}},
+            detail="A assinatura mudou ou uma tentativa PagBank já foi iniciada. Atualize a página.",
         )
     return {
         "subscription_status": "pending_payment",
-        "invoice_url": checkout["invoice_url"],
-        "message": None if checkout["invoice_url"] else "A cobrança está sendo gerada. Tente novamente em instantes.",
+        "payment_url": payment_url,
+        "message": "Após a confirmação do pagamento no painel PagBank, um administrador liberará o acesso.",
     }
 
 

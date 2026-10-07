@@ -23,7 +23,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SPECIALTY_LABELS, brl, endSession } from "@/lib/session";
 
-const EMPTY_PLAN = { name: "", price: "", max_users: "", max_patients: "", features: "", active: true };
+const EMPTY_PLAN = { name: "", price: "", max_users: "", max_patients: "", features: "", pagbank_recurring_url: "", active: true };
 const EMPTY_TENANT = { name: "", specialty: "geral", plan_id: "", admin_name: "", admin_email: "", admin_password: "" };
 const EMPTY_TENANT_EDIT = { name: "", specialty: "geral", plan_id: "", admin_name: "", admin_email: "", status: "active", subscription_status: "active" };
 
@@ -83,6 +83,7 @@ export default function SuperAdmin() {
         max_users: p.max_users,
         max_patients: p.max_patients,
         features: p.features || [],
+        pagbank_recurring_url: p.pagbank_recurring_url || "",
         active: !p.active,
       }),
     onSuccess: () => { invalidate(); toast.success("Status do plano atualizado"); },
@@ -116,6 +117,15 @@ export default function SuperAdmin() {
     onError: (e) => toast.error(e?.body?.detail || "Falha ao atualizar clínica"),
   });
 
+  const resetPaymentAttempt = useMutation({
+    mutationFn: (tenantId) => apiPost(`/admin/tenants/${tenantId}/subscription-payment/reset`, {}),
+    onSuccess: () => {
+      invalidate();
+      toast.success("Nova tentativa PagBank liberada");
+    },
+    onError: (e) => toast.error(e?.body?.detail || "Falha ao liberar nova tentativa"),
+  });
+
   function openNewPlan() {
     setEditingPlan(null);
     setPlanForm(EMPTY_PLAN);
@@ -130,6 +140,7 @@ export default function SuperAdmin() {
       max_users: String(p.max_users),
       max_patients: String(p.max_patients),
       features: (p.features || []).join(", "),
+      pagbank_recurring_url: p.pagbank_recurring_url || "",
       active: p.active,
     });
     setPlanOpen(true);
@@ -143,6 +154,7 @@ export default function SuperAdmin() {
       max_users: Number(planForm.max_users) || 1,
       max_patients: Number(planForm.max_patients) || 1,
       features: planForm.features.split(",").map((s) => s.trim()).filter(Boolean),
+      pagbank_recurring_url: planForm.pagbank_recurring_url.trim() || null,
       active: planForm.active,
     });
   }
@@ -437,9 +449,22 @@ export default function SuperAdmin() {
                             {(t.subscription_status === "pending_payment" || (t.subscription_status === "trialing" && t.trial_ends_at && new Date(t.trial_ends_at) <= new Date())) ? <Button
                               variant="outline"
                               size="sm"
+                              title="Confirme somente após verificar o pagamento no painel PagBank."
                               onClick={() => patchTenant.mutate({ id: t.id, body: { subscription_status: "active" } })}
                               data-testid={`tenant-subscription-activate-${t.id}`}
-                            >Confirmar Pix</Button> : null}
+                            >Confirmar pagamento</Button> : null}
+                            {t.subscription_status === "pending_payment" && t.pagbank_recurring_link_started ? <Button
+                              variant="outline"
+                              size="sm"
+                              title="Use somente após confirmar no painel PagBank que não foi criada uma assinatura."
+                              disabled={resetPaymentAttempt.isPending}
+                              onClick={() => {
+                                if (window.confirm("Confirme no painel PagBank que nenhuma assinatura foi criada antes de liberar outra tentativa.")) {
+                                  resetPaymentAttempt.mutate(t.id);
+                                }
+                              }}
+                              data-testid={`tenant-subscription-reset-payment-${t.id}`}
+                            >Liberar nova tentativa</Button> : null}
                             <Button
                               variant={t.status === "active" ? "outline" : "default"}
                               size="sm"
@@ -490,6 +515,11 @@ export default function SuperAdmin() {
                     <div className="space-y-1.5">
                       <Label htmlFor="pl-feat">Recursos liberados (separados por vírgula)</Label>
                       <Input id="pl-feat" value={planForm.features} onChange={(e) => setPlanForm((f) => ({ ...f, features: e.target.value }))} placeholder="Agenda, Prontuário, Marketing" data-testid="plan-features-input" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="pl-pagbank-url">Link recorrente PagBank (HTTPS)</Label>
+                      <Input id="pl-pagbank-url" type="url" value={planForm.pagbank_recurring_url} onChange={(e) => setPlanForm((f) => ({ ...f, pagbank_recurring_url: e.target.value }))} placeholder="https://..." data-testid="plan-pagbank-recurring-url-input" />
+                      <p className="text-xs text-slate-500">Crie o link mensal no painel PagBank e associe-o ao valor deste plano.</p>
                     </div>
                     <label className="flex items-center gap-2 text-sm text-slate-300">
                       <input

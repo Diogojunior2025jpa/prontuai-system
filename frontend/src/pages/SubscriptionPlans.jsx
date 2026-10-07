@@ -32,8 +32,8 @@ export default function SubscriptionPlans() {
     mutationFn: (plan_id) => apiPost("/clinic/subscription/checkout", { plan_id }),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["clinic-subscription"] });
-      if (result.invoice_url) {
-        window.location.assign(result.invoice_url);
+      if (result.payment_url) {
+        window.location.assign(result.payment_url);
       } else {
         toast.info(result.message || "A cobrança está sendo gerada. Tente novamente em instantes.");
       }
@@ -48,6 +48,7 @@ export default function SubscriptionPlans() {
   const trialEnds = subscription?.trial_ends_at ? new Date(subscription.trial_ends_at) : null;
   const isTrialing = subscription?.subscription_status === "trialing";
   const pendingPayment = ["pending_payment", "expired"].includes(subscription?.subscription_status);
+  const pagbankLinkStarted = Boolean(subscription?.pagbank_recurring_link_started);
   const paidActive = (subscription?.subscription_status || "active") === "active";
   const paymentOverdue = ["overdue", "payment_problem"].includes(subscription?.subscription_payment_status);
   const graceUntil = subscription?.subscription_grace_until
@@ -62,7 +63,7 @@ export default function SubscriptionPlans() {
           <div><p className="overline text-cyan-400">Assinatura da clínica</p><h1 className="mt-2 font-heading text-2xl font-semibold">Planos disponíveis</h1><p className="mt-2 text-sm text-slate-400">Escolha o plano que atende à sua clínica.</p></div>
           {isTrialing && trialEnds ? <Badge variant="outline" className="border-emerald-900 text-emerald-300"><Clock3 className="mr-1 size-3" />Teste até {trialEnds.toLocaleDateString("pt-BR")}</Badge> : null}
         </header>
-        {pendingPayment ? <p className="mt-5 rounded-md border border-amber-900 bg-amber-950/30 p-4 text-sm text-amber-200" data-testid="subscription-pending-payment">{paymentOverdue ? `Há uma cobrança do Asaas em atraso. O acesso permanece disponível até ${graceUntil || "o fim do prazo de tolerância"}; regularize para evitar a suspensão.` : "Seu teste terminou. Gere a cobrança mensal pelo Asaas para escolher uma forma de pagamento. O acesso será liberado após a confirmação do pagamento."}{subscription?.pending_plan_change_locked ? " Já existe uma assinatura iniciada para este plano; para alterá-lo, contate o suporte." : ""}</p> : null}
+        {pendingPayment ? <p className="mt-5 rounded-md border border-amber-900 bg-amber-950/30 p-4 text-sm text-amber-200" data-testid="subscription-pending-payment">{paymentOverdue ? `Há uma cobrança anterior do Asaas em atraso. O acesso permanece disponível até ${graceUntil || "o fim do prazo de tolerância"}; regularize para evitar a suspensão.` : pagbankLinkStarted ? "Sua tentativa de assinatura PagBank foi iniciada. O acesso será liberado após a conferência manual do pagamento; não inicie outra assinatura enquanto aguarda." : "Seu teste terminou. Escolha um plano e continue pelo link recorrente PagBank. A cobrança recorrente exige cartão de crédito e o acesso será liberado após a confirmação manual do pagamento."}{subscription?.pending_plan_change_locked ? " Já existe uma assinatura iniciada para este plano; para alterá-lo, contate o suporte." : ""}</p> : null}
         {plansLoading ? <p className="mt-6 text-sm text-slate-400">Carregando planos…</p> : plans.length ? <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {plans.map((plan) => {
             const selected = subscription?.plan_id === plan.id;
@@ -72,7 +73,7 @@ export default function SubscriptionPlans() {
                 <Button
                   className="w-full"
                   variant={selected || paidActive ? "outline" : "default"}
-                  disabled={selectPlan.isPending || checkout.isPending || (selected && !pendingPayment) || (subscription?.pending_plan_change_locked && !selected) || paidActive}
+                  disabled={selectPlan.isPending || checkout.isPending || (selected && (!pendingPayment || pagbankLinkStarted)) || (subscription?.pending_plan_change_locked && !selected) || paidActive}
                   onClick={() => {
                     if (pendingPayment && selected) {
                       checkout.mutate(plan.id);
@@ -82,7 +83,7 @@ export default function SubscriptionPlans() {
                   }}
                   data-testid={`select-plan-${plan.id}`}
                 >
-                  {checkout.isPending ? "Gerando cobrança…" : pendingPayment && selected ? "Gerar cobrança Asaas" : selected ? "Plano atual" : paidActive ? "Plano ativo" : selectPlan.isPending ? "Salvando…" : isTrialing ? "Usar no teste" : "Selecionar plano"}
+                  {checkout.isPending ? "Abrindo PagBank…" : pendingPayment && selected && pagbankLinkStarted ? "Aguardando confirmação" : pendingPayment && selected ? "Continuar para PagBank" : selected ? "Plano atual" : paidActive ? "Plano ativo" : selectPlan.isPending ? "Salvando…" : isTrialing ? "Usar no teste" : "Selecionar plano"}
                 </Button>
               </CardContent>
             </Card>;

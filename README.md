@@ -74,8 +74,9 @@ FastAPI, async throughout. `python` is the app venv interpreter
   clinical structuring), `GEMINI_API_KEY` (aggregate-only Super Admin reports),
   `APP_SECRET_ENCRYPTION_KEY` (Fernet key used to encrypt keys saved
   from the Super Admin panel), and optional `GEMINI_MODEL` (defaults to
-  `gemini-2.5-flash`), `ASAAS_API_KEY`, `ASAAS_ENV` (`sandbox` by default;
-  set to `production` only after sandbox validation), and `ASAAS_WEBHOOK_TOKEN`.
+  `gemini-2.5-flash`), and the legacy `ASAAS_API_KEY`, `ASAAS_ENV` (`sandbox`
+  by default; set to `production` only after sandbox validation), and
+  `ASAAS_WEBHOOK_TOKEN` for subscriptions already started with Asaas.
   In development only, if no master key is configured, the app creates one
   in `backend/.api_key_encryption.key` with owner-only permissions. Back up
   that file securely; losing it makes locally stored keys unrecoverable. In
@@ -99,18 +100,25 @@ FastAPI, async throughout. `python` is the app venv interpreter
   configured, password reset messages are not sent; the public endpoint
   intentionally returns a generic response either way.
   Public clinic registration creates a seven-day trial on the least expensive
-  active plan. After trial expiry, a clinic administrator can create a monthly
-  Asaas subscription with billing type `UNDEFINED` and continue on Asaas's
-  hosted invoice page to choose an enabled payment method. The API credential
-  must match `ASAAS_ENV`; its authentication header is `access_token`. Register
-  an Asaas webhook at `https://<render-api>/api/webhooks/asaas`, configure the
-  same secret as `ASAAS_WEBHOOK_TOKEN` in Render and as the webhook's
-  authentication token in Asaas, and subscribe to payment confirmation,
-  receipt, overdue, refund, and chargeback events. The webhook activates a
-  subscription only after a payment confirmation/receipt. Overdue or reversed
-  payments receive a five-day access grace period. Do not set production
-  credentials until the Sandbox checkout and webhook flow have been tested.
-  Never paste payment secrets into source code, logs, commits, or chat.
+  active plan. For new subscriptions on PagBank Pessoa Física, first create a
+  monthly recurring payment link for each plan in the PagBank panel (credit
+  card only): in the web panel, open **Menu de Vendas → Link de Pagamentos**,
+  create a link, choose **Cobrança recorrente** and monthly frequency, then
+  save the resulting HTTPS link in **Super Admin → Planos → Editar** for the
+  matching plan. The clinic is sent to PagBank and remains pending until an
+  administrator verifies the subscription/payment in PagBank and confirms it
+  in Super Admin. This PF
+  recurring-link flow does not use a PagBank API token or webhook; do not
+  activate access from the browser return alone. An administrator may release
+  another checkout attempt only after confirming in PagBank that no subscription
+  was created, to avoid duplicate recurring charges. Existing Asaas
+  subscriptions and their webhook remain supported during migration; cancel
+  them in Asaas after verifying each clinic has moved to PagBank. Never paste
+  payment secrets into source code, logs, commits, or chat.
+  PagBank PF recurring-link renewals and cancellations are not synchronized to
+  this system by webhook. Administrators must periodically check the PagBank
+  recurring panel and manually block a clinic whose subscription is canceled
+  or unpaid, then restore it only after verifying payment.
 - **Dates**: `backend/lib/dates.py` — `today_iso(tz=None)`. The pod clock is
   UTC; anchor "today" server-side with this, never with client-side date math.
 - **Interactive check**: `cd /app/backend && python -c 'import server'` catches

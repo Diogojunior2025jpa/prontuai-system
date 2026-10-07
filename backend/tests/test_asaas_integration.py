@@ -7,8 +7,9 @@ from fastapi import HTTPException
 import lib.asaas as asaas
 import lib.auth as auth
 import routers.clinic as clinic
+import routers.superadmin as superadmin
 import routers.webhooks as webhooks
-from models.schemas import SelectPlanIn
+from models.schemas import PlanIn, SelectPlanIn
 
 
 class MemoryTenants:
@@ -134,36 +135,21 @@ async def test_checkout_creates_monthly_undefined_subscription(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_checkout_route_saves_provider_ids_without_activating_plan(monkeypatch):
+async def test_legacy_asaas_checkout_reuses_existing_invoice(monkeypatch):
     tenants = MemoryTenants([{
         "id": "tenant-1",
         "subscription_status": "pending_payment",
         "selected_plan_id": "pro",
-    }])
-    users = MemoryTenants([{
-        "id": "admin-1",
-        "tenant_id": "tenant-1",
-        "role": "clinic_admin",
-        "active": True,
-        "name": "Ana",
-        "email": "ana@example.com",
+        "asaas_subscription_id": "sub-existing",
+        "asaas_plan_id": "pro",
+        "asaas_checkout_url": "https://www.asaas.com/i/existing",
     }])
     plans = MemoryTenants([{"id": "pro", "name": "Pro", "price": 349, "active": True}])
     monkeypatch.setattr(
         clinic,
         "db",
-        SimpleNamespace(tenants=tenants, users=users, plans=plans),
+        SimpleNamespace(tenants=tenants, plans=plans),
     )
-
-    async def mock_checkout(*_args):
-        return {
-            "customer_id": "cus_test",
-            "subscription_id": "sub_test",
-            "due_date": "2026-10-08",
-            "invoice_url": "https://www.asaas.com/i/test",
-        }
-
-    monkeypatch.setattr(clinic, "create_asaas_checkout", mock_checkout)
 
     result = await clinic.subscription_checkout(
         SelectPlanIn(plan_id="pro"),
@@ -171,37 +157,55 @@ async def test_checkout_route_saves_provider_ids_without_activating_plan(monkeyp
     )
 
     assert result["subscription_status"] == "pending_payment"
-    assert result["invoice_url"] == "https://www.asaas.com/i/test"
-    assert tenants.documents[0]["asaas_subscription_id"] == "sub_test"
+    assert result["payment_url"] == "https://www.asaas.com/i/existing"
+    assert tenants.documents[0]["asaas_subscription_id"] == "sub-existing"
     assert tenants.documents[0]["subscription_status"] == "pending_payment"
 
 
 @pytest.mark.asyncio
-async def test_failed_checkout_releases_tenant_lock(monkeypatch):
+async def test_pagbank_recurring_link_checkout_requires_manual_confirmation(monkeypatch):
     tenants = MemoryTenants([{
         "id": "tenant-1",
         "subscription_status": "pending_payment",
         "selected_plan_id": "pro",
     }])
-    users = MemoryTenants([{
-        "id": "admin-1",
-        "tenant_id": "tenant-1",
-        "role": "clinic_admin",
+    plans = MemoryTenants([{
+        "id": "pro",
+        "name": "Pro",
+        "price": 349,
         "active": True,
-        "name": "Ana",
-        "email": "ana@example.com",
+        "pagbank_recurring_url": "https://pag.ae/recurring-pro",
     }])
-    plans = MemoryTenants([{"id": "pro", "name": "Pro", "price": 349, "active": True}])
-    monkeypatch.setattr(
-        clinic,
-        "db",
-        SimpleNamespace(tenants=tenants, users=users, plans=plans),
+    monkeypatch.setattr(clinic, "db", SimpleNamespace(tenants=tenants, plans=plans))
+
+    result = await clinic.subscription_checkout(
+        SelectPlanIn(plan_id="pro"),
+        {"id": "admin-1", "tenant_id": "tenant-1", "role": "clinic_admin"},
     )
 
-    async def failed_checkout(*_args):
-        raise asaas.AsaasApiError
+    assert result["subscription_status"] == "pending_payment"
+    assert result["payment_url"] == "https://pag.ae/recurring-pro"
+    assert tenants.documents[0]["subscription_status"] == "pending_payment"
+    assert tenants.documents[0]["subscription_payment_status"] == "awaiting_manual_confirmation"
+    assert tenants.documents[0]["pagbank_recurring_link_started"] is True
 
-    monkeypatch.setattr(clinic, "create_asaas_checkout", failed_checkout)
+    with pytest.raises(HTTPException) as error:
+        await clinic.subscription_checkout(
+            SelectPlanIn(plan_id="pro"),
+            {"id": "admin-1", "tenant_id": "tenant-1", "role": "clinic_admin"},
+        )
+    assert error.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_pagbank_checkout_requires_a_configured_recurring_link(monkeypatch):
+    tenants = MemoryTenants([{
+        "id": "tenant-1",
+        "subscription_status": "pending_payment",
+        "selected_plan_id": "pro",
+    }])
+    plans = MemoryTenants([{"id": "pro", "name": "Pro", "price": 349, "active": True}])
+    monkeypatch.setattr(clinic, "db", SimpleNamespace(tenants=tenants, plans=plans))
 
     with pytest.raises(HTTPException) as error:
         await clinic.subscription_checkout(
@@ -209,9 +213,38 @@ async def test_failed_checkout_releases_tenant_lock(monkeypatch):
             {"id": "admin-1", "tenant_id": "tenant-1", "role": "clinic_admin"},
         )
 
-    assert error.value.status_code == 502
-    assert "asaas_checkout_lock_id" not in tenants.documents[0]
-    assert "asaas_checkout_lock_until" not in tenants.documents[0]
+    assert error.value.status_code == 503
+    assert not tenants.documents[0].get("pagbank_recurring_link_started")
+
+
+@pytest.mark.asyncio
+async def test_superadmin_can_release_pagbank_attempt_after_manual_review(monkeypatch):
+    tenants = MemoryTenants([{
+        "id": "tenant-1",
+        "subscription_status": "pending_payment",
+        "pagbank_recurring_link_started": True,
+        "pagbank_payment_link": "https://pag.ae/recurring-pro",
+        "pagbank_plan_id": "pro",
+    }])
+    monkeypatch.setattr(superadmin, "db", SimpleNamespace(tenants=tenants))
+
+    result = await superadmin.reset_subscription_payment_attempt("tenant-1")
+
+    assert result == {"ok": True}
+    assert not tenants.documents[0].get("pagbank_recurring_link_started")
+    assert not tenants.documents[0].get("pagbank_payment_link")
+    assert not tenants.documents[0].get("pagbank_plan_id")
+
+
+def test_plan_rejects_non_https_pagbank_recurring_link():
+    with pytest.raises(ValueError):
+        PlanIn(
+            name="Pro",
+            price=349,
+            max_users=15,
+            max_patients=5000,
+            pagbank_recurring_url="http://example.com/checkout",
+        )
 
 
 @pytest.mark.asyncio

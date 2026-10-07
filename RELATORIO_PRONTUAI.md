@@ -8,7 +8,8 @@
 - A API pública respondeu HTTP 200 na última verificação.
 - A recuperação de senha por Gmail via Google Apps Script foi configurada e
   testada com sucesso: o e-mail chegou à caixa de entrada.
-- Último commit publicado: `4b5ea11` (`docs: registra publicacao do guia e Asaas`).
+- Último commit no histórico publicado: `6dce72a` (`docs: atualiza estado do painel de boas-vindas`).
+- A migração PagBank descrita abaixo está em alterações locais, ainda não publicada.
 - Não há credenciais, tokens ou valores de segredos registrados neste arquivo.
 
 ## Trabalho concluído e publicado
@@ -101,13 +102,30 @@
 - Alteração preparada para publicação com este relatório; não altera regras nem
   dados de assinatura.
 
-### Integração Asaas — código publicado; configuração e teste pendentes
+### Migração de cobrança para PagBank PF — em configuração
 
-- Após a escolha do usuário, iniciada a integração de assinaturas mensais com
-  checkout do Asaas. O cliente pode escolher a forma de pagamento na fatura
-  hospedada pelo Asaas.
-- A API usa sandbox por padrão e produção somente quando `ASAAS_ENV=production`.
-  A chave `ASAAS_API_KEY` é lida apenas do ambiente; nunca gravada no código.
+- A recorrência de novas assinaturas usa links mensais criados no painel PagBank,
+  pois a API de Pagamentos Recorrentes não está habilitada para PF. Os links
+  recorrentes PF aceitam cartão de crédito; não há confirmação automática por
+  webhook nesse fluxo.
+- O Super Admin associa um link HTTPS a cada plano. A clínica é redirecionada
+  ao PagBank e permanece pendente até um administrador conferir o pagamento e
+  confirmar a assinatura no painel.
+- O sistema bloqueia novas tentativas enquanto uma tentativa estiver em
+  conferência. O Super Admin pode liberar outra após verificar que o PagBank
+  não criou uma assinatura, para evitar cobranças recorrentes duplicadas.
+- Como os links PF não sincronizam renovações/cancelamentos por webhook, a
+  conferência periódica no painel PagBank e eventual bloqueio/liberação manual
+  da clínica também ficam sob responsabilidade do administrador.
+- Links PagBank, conta e configuração real ainda dependem do usuário; nenhum
+  link, token ou webhook foi configurado neste workspace.
+
+### Integração Asaas — código legado para migração
+
+- Assinaturas Asaas já iniciadas mantêm acesso ao checkout e ao webhook durante
+  a migração. Novas assinaturas usam PagBank PF.
+- A integração antiga usa sandbox por padrão e produção somente quando
+  `ASAAS_ENV=production`. A chave `ASAAS_API_KEY` é lida apenas do ambiente.
 - O webhook autenticado em `/api/webhooks/asaas` processa confirmações,
   recebimentos, atrasos e estornos/chargebacks. Acesso fica pendente até a
   confirmação de pagamento; atraso tem **5 dias de tolerância**, conforme
@@ -130,14 +148,11 @@
 
 ## Pendências para continuar amanhã
 
-1. **Configurar e validar Asaas Sandbox:** após confirmar o deploy do commit
-   `2869c6e`, criar uma conta de testes, configurar
-   `ASAAS_API_KEY`, `ASAAS_ENV=sandbox` e `ASAAS_WEBHOOK_TOKEN` em ambiente
-   privado no Render e registrar o webhook
-   `https://<API-Render>/api/webhooks/asaas`. Testar assinatura, pagamento,
-   confirmação por webhook e os 5 dias de tolerância; depois escolher o momento
-   de trocar para `ASAAS_ENV=production` e a chave real. Nunca envie as chaves
-   pela conversa.
+1. **Configurar PagBank PF:** criar links recorrentes mensais no painel PagBank
+   para cada plano ativo e cadastrar cada URL no Super Admin. Testar o checkout
+   e confirmar uma assinatura manualmente após verificar o pagamento no painel.
+   Cancelar no Asaas toda assinatura migrada para evitar cobrança dupla. Nunca
+   envie chaves pela conversa.
 2. **Confirmar deploy e testar o guia financeiro e a marca:** conferir a rota
    `/app/financeiro` com uma conta que tenha `finance.view`.
 3. **Financeiro completo da clínica:** decidir e implementar cadastro de
@@ -158,9 +173,10 @@
 
 ## Estado do repositório ao fechar
 
-- Commit mais recente publicado: `a33aec1` (texto de boas-vindas e relatório).
-- Confirmar o deploy automático da Vercel/Render e testar o Sandbox Asaas antes
-  de usar cobrança real.
+- Último commit publicado: `6dce72a` (texto de boas-vindas e relatório).
+- Confirmar o deploy automático da Vercel/Render e configurar os links
+  recorrentes PagBank PF por plano antes de habilitar cobranças reais.
+- A alteração atual de PagBank ainda não foi commitada nem publicada.
 - `relatorio_execucao.txt` possui alteração local anterior e foi preservado,
   sem inclusão nos commits desta sequência.
 - Este relatório acompanha o estado publicado do repositório.

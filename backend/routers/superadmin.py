@@ -69,6 +69,7 @@ async def _tenant_out(t: dict, plans: dict) -> TenantOut:
         created_at=t.get("created_at"),
         subscription_status=t.get("subscription_status", "active"),
         trial_ends_at=t.get("trial_ends_at"),
+        pagbank_recurring_link_started=bool(t.get("pagbank_recurring_link_started")),
     )
 
 
@@ -150,6 +151,9 @@ async def patch_tenant(tenant_id: str, payload: TenantPatch):
 
     if update.get("subscription_status") == "active":
         update["subscription_started_at"] = utcnow()
+        if current.get("pagbank_recurring_link_started"):
+            update["subscription_payment_status"] = "confirmed_manual"
+            update["pagbank_payment_confirmed_at"] = utcnow()
     if admin_updates:
         await db.users.update_one(
             {"id": admin["id"], "tenant_id": tenant_id},
@@ -160,6 +164,31 @@ async def patch_tenant(tenant_id: str, payload: TenantPatch):
     )
     plans = {p["id"]: p for p in await db.plans.find({}, {"_id": 0}).to_list(200)}
     return await _tenant_out(t, plans)
+
+
+@router.post("/tenants/{tenant_id}/subscription-payment/reset")
+async def reset_subscription_payment_attempt(tenant_id: str):
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Clínica não encontrada")
+    if (
+        tenant.get("subscription_status") != "pending_payment"
+        or not tenant.get("pagbank_recurring_link_started")
+    ):
+        raise HTTPException(status_code=409, detail="Não há tentativa PagBank pendente para liberar")
+    result = await db.tenants.update_one(
+        {"id": tenant_id, "subscription_status": "pending_payment"},
+        {
+            "$unset": {
+                "pagbank_recurring_link_started": "",
+                "pagbank_payment_link": "",
+                "pagbank_plan_id": "",
+            }
+        },
+    )
+    if not result.matched_count:
+        raise HTTPException(status_code=409, detail="O status da assinatura mudou; atualize a página")
+    return {"ok": True}
 
 
 # ---------- global overview ----------

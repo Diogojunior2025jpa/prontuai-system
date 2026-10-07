@@ -3,6 +3,7 @@
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
@@ -89,6 +90,18 @@ class PlanIn(BaseModel):
     max_patients: int = Field(ge=1)
     features: list[str] = []
     active: bool = True
+    pagbank_recurring_url: str | None = Field(default=None, max_length=2048)
+
+    @field_validator("pagbank_recurring_url")
+    @classmethod
+    def validate_pagbank_recurring_url(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        value = value.strip()
+        parsed = urlsplit(value)
+        if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password:
+            raise ValueError("O link recorrente PagBank deve ser uma URL HTTPS válida")
+        return value
 
 
 class Plan(PlanIn):
@@ -121,6 +134,7 @@ class TenantOut(BaseModel):
     created_at: datetime | None = None
     subscription_status: str | None = None
     trial_ends_at: datetime | None = None
+    pagbank_recurring_link_started: bool = False
 
 
 class TenantPatch(BaseModel):
