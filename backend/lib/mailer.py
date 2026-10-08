@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import quote
 
 import requests
@@ -46,7 +47,9 @@ async def send_password_reset_email(email: str, token: str) -> bool:
         return False
 
     try:
-        await asyncio.to_thread(_send, email, token)
+        loop = asyncio.get_running_loop()
+        with ThreadPoolExecutor(max_workers=1, thread_name_prefix="password-reset-mailer") as executor:
+            await loop.run_in_executor(executor, _send, email, token)
         return True
     except (requests.RequestException, ValueError, KeyError):
         logger.exception(

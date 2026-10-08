@@ -219,7 +219,7 @@ export default function AssistantWidget() {
 
           <p className="px-4 pb-3 text-[10px] leading-snug text-slate-600">
             <Sparkles className="inline size-3 mr-1 align-[-1px]" />
-            Respostas geradas por IA. Decisões clínicas são sempre do profissional responsável.
+            Respostas geradas pelo NEXO. Decisões clínicas são sempre do profissional responsável.
           </p>
         </div>
       ) : null}

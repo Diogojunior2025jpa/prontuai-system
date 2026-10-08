@@ -8,8 +8,8 @@ import { Label } from "@/components/ui/label";
 import { apiGet, apiPut } from "@/lib/api";
 
 const PROVIDERS = [
-  { id: "groq", label: "Groq", detail: "Transcrição de áudio e estruturação clínica" },
-  { id: "gemini", label: "Gemini", detail: "Relatórios agregados do sistema" },
+  { id: "groq", label: "Voz NEXO", detail: "Transcrição de áudio do prontuário" },
+  { id: "gemini", label: "NEXO", detail: "Rascunhos clínicos e relatórios agregados" },
 ];
 
 export default function ApiKeySettingsPanel() {

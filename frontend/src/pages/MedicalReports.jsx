@@ -14,6 +14,29 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 const TEMPLATE_LABELS = { geral: "Clínica Geral", odonto: "Odontologia", oftalmo: "Oftalmologia" };
+const FIELD_LABELS = {
+  queixa_principal: "Queixa principal",
+  historia: "História da doença atual",
+  exame_fisico: "Exame físico",
+  dentes_afetados: "Dentes afetados (FDI)",
+  exame_clinico: "Exame clínico",
+  acuidade_od: "Acuidade visual - olho direito",
+  acuidade_os: "Acuidade visual - olho esquerdo",
+  pressao_intraocular: "Pressão intraocular",
+  diagnostico: "Diagnóstico / hipótese diagnóstica",
+  cid10: "CID-10 sugerido (validar pelo profissional)",
+  conduta: "Conduta",
+  plano_tratamento: "Plano de tratamento",
+  prontuario_formatado_nexo: "Evolução clínica",
+  rascunhos_ia: "Sugestões do NEXO (rascunhos para revisão)",
+  checagens_ia: "Checagens de segurança",
+  odontograma: "Odontograma",
+};
+const HIDDEN_REPORT_FIELDS = new Set([
+  "secoes_prontuario_nexo",
+  "revisao_medica_obrigatoria",
+  "revisao_medica_confirmada",
+]);
 
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (character) => ({
@@ -21,10 +44,37 @@ function escapeHtml(value) {
   })[character]);
 }
 
-function printableValue(value) {
+function printableValue(value, key) {
   if (value == null || value === "") return "Não informado";
+  if (key === "odontograma" && typeof value === "object") {
+    const statusLabels = {
+      carie: "Cárie",
+      restauracao: "Restauração",
+      canal: "Canal",
+      protese: "Prótese",
+      extraido: "Extraído",
+    };
+    const findings = Object.entries(value)
+      .filter(([, status]) => statusLabels[status])
+      .map(([tooth, status]) => `${tooth}: ${statusLabels[status]}`);
+    return findings.length ? findings.join(" · ") : "Nenhuma alteração registrada";
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => {
+      if (item && typeof item === "object") {
+        return [item.title, item.content].filter(Boolean).join(": ") || JSON.stringify(item);
+      }
+      return String(item);
+    }).join("\n");
+  }
   if (typeof value === "object") return JSON.stringify(value, null, 2);
   return String(value);
+}
+
+function reportFields(fields = {}) {
+  return Object.entries(fields).filter(([key, value]) => (
+    !HIDDEN_REPORT_FIELDS.has(key) && value !== null
+  ));
 }
 
 export default function MedicalReports() {
@@ -57,6 +107,7 @@ export default function MedicalReports() {
   }])).values()];
   const selectedRecord = records.find((record) => record.id === recordId) || records[0];
   const selectedPatientName = patientNames[selectedRecord?.patient_id] || "Paciente";
+  const clinicName = me?.tenant?.name || "Clínica não informada";
 
   const saveCopy = useMutation({
     mutationFn: () => apiPost("/clinic/records", {
@@ -120,10 +171,10 @@ export default function MedicalReports() {
 
   function exportDoc() {
     if (!selectedRecord) return;
-    const fields = Object.entries(selectedRecord.fields || {}).map(([key, value]) => (
-      `<section><h2>${escapeHtml(key.replaceAll("_", " "))}</h2><p>${escapeHtml(printableValue(value))}</p></section>`
+    const fields = reportFields(selectedRecord.fields).map(([key, value]) => (
+      `<section><h2>${escapeHtml(FIELD_LABELS[key] || key.replaceAll("_", " "))}</h2><p>${escapeHtml(printableValue(value, key))}</p></section>`
     )).join("");
-    const documentHtml = `<!doctype html><html><head><meta charset="utf-8"><title>Laudo médico</title><style>body{font:14px Arial,sans-serif;color:#172033;line-height:1.5;margin:36px}h1{font-size:22px;border-bottom:2px solid #176b70;padding-bottom:12px}h2{font-size:13px;text-transform:capitalize;color:#176b70;margin-bottom:4px}p{white-space:pre-wrap;margin-top:0}section{margin:18px 0}.meta{color:#52606d}</style></head><body><h1>Laudo médico</h1><p class="meta">Paciente: ${escapeHtml(selectedPatientName)}<br>Especialidade: ${escapeHtml(TEMPLATE_LABELS[selectedRecord.template] || selectedRecord.template)}<br>Data: ${escapeHtml(ptDate(String(selectedRecord.created_at).slice(0, 10)))}<br>Profissional: ${escapeHtml(selectedRecord.author_name || "Não informado")}</p>${fields}</body></html>`;
+    const documentHtml = `<!doctype html><html><head><meta charset="utf-8"><title>Documento clínico</title><style>body{font:14px Arial,sans-serif;color:#172033;line-height:1.5;margin:36px}h1{font-size:22px;border-bottom:2px solid #176b70;padding-bottom:12px}h2{font-size:13px;color:#176b70;margin-bottom:4px}p{white-space:pre-wrap;margin-top:0}section{margin:18px 0}.meta{color:#52606d}.clinic{font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:#176b70;font-weight:bold}</style></head><body><p class="clinic">${escapeHtml(clinicName)} · ProntuAI</p><h1>Documento clínico</h1><p class="meta">Paciente: ${escapeHtml(selectedPatientName)}<br>Especialidade: ${escapeHtml(TEMPLATE_LABELS[selectedRecord.template] || selectedRecord.template)}<br>Data de emissão: ${escapeHtml(ptDate(String(selectedRecord.created_at).slice(0, 10)))}<br>Profissional responsável: ${escapeHtml(selectedRecord.author_name || "Não informado")}<br>Consulta ID: ${escapeHtml(selectedRecord.id)}</p>${fields}</body></html>`;
     const url = URL.createObjectURL(new Blob([documentHtml], { type: "application/msword;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = url;
@@ -221,20 +272,21 @@ export default function MedicalReports() {
             {selectedRecord ? (
               <article className="report-print-root mx-auto max-w-3xl space-y-6 rounded-sm bg-white p-6 text-slate-900 sm:p-10" data-testid="report-document">
                 <header className="border-b-2 border-teal-800 pb-5">
-                  <p className="font-mono text-xs uppercase text-teal-800">ProntuAI · documento clínico</p>
-                  <h2 className="mt-2 text-2xl font-semibold">Laudo médico</h2>
+                  <p className="font-mono text-xs uppercase text-teal-800">{clinicName} · ProntuAI</p>
+                  <h2 className="mt-2 text-2xl font-semibold">Documento clínico</h2>
                   <dl className="mt-4 grid gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
                     <div><dt className="font-semibold">Paciente</dt><dd>{selectedPatientName}</dd></div>
                     <div><dt className="font-semibold">Especialidade</dt><dd>{TEMPLATE_LABELS[selectedRecord.template] || selectedRecord.template}</dd></div>
                     <div><dt className="font-semibold">Data de emissão</dt><dd>{ptDate(String(selectedRecord.created_at).slice(0, 10))}</dd></div>
                     <div><dt className="font-semibold">Profissional responsável</dt><dd>{selectedRecord.author_name || "Não informado"}</dd></div>
+                    <div className="sm:col-span-2"><dt className="font-semibold">Consulta ID</dt><dd className="break-all font-mono text-xs">{selectedRecord.id}</dd></div>
                   </dl>
                 </header>
                 <div className="space-y-5">
-                  {Object.entries(selectedRecord.fields || {}).map(([key, value]) => (
+                  {reportFields(selectedRecord.fields).map(([key, value]) => (
                     <section key={key} className="break-inside-avoid border-b border-slate-200 pb-4">
-                      <h3 className="text-sm font-semibold capitalize text-teal-900">{key.replaceAll("_", " ")}</h3>
-                      <p className="mt-1 whitespace-pre-wrap text-sm leading-6">{printableValue(value)}</p>
+                      <h3 className="text-sm font-semibold text-teal-900">{FIELD_LABELS[key] || key.replaceAll("_", " ")}</h3>
+                      <p className="mt-1 whitespace-pre-wrap text-sm leading-6">{printableValue(value, key)}</p>
                     </section>
                   ))}
                 </div>

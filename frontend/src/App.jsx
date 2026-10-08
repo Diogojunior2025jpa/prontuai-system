@@ -18,6 +18,7 @@ import Campaigns from "@/pages/Campaigns";
 import SuperAdmin from "@/pages/SuperAdmin";
 import PortalLogin from "@/pages/PortalLogin";
 import PatientPortal from "@/pages/PatientPortal";
+import NotFound from "@/pages/NotFound";
 
 const FinancialGuide = lazy(() => import("@/pages/FinancialGuide"));
 
@@ -51,6 +52,7 @@ export default function App() {
         <Route path="/superadmin" element={<SuperAdmin />} />
         <Route path="/portal/login" element={<PortalLogin />} />
         <Route path="/portal" element={<PatientPortal />} />
+        <Route path="*" element={<NotFound />} />
       </Routes>
       <Toaster position="top-right" richColors />
     </>

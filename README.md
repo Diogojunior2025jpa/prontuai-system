@@ -71,7 +71,8 @@ FastAPI, async throughout. `python` is the app venv interpreter
   `uuid4` default-factory pattern from `StatusCheck`.
 - **Config**: `backend/.env` — `MONGO_URL` (connection string), `DB_NAME`
   (database name), `CORS_ORIGINS`, `GROQ_API_KEY` (audio transcription and
-  clinical structuring), `GEMINI_API_KEY` (aggregate-only Super Admin reports),
+  legacy clinical structuring), `GEMINI_API_KEY` (NEXO clinical drafts and
+  aggregate-only Super Admin reports),
   `APP_SECRET_ENCRYPTION_KEY` (Fernet key used to encrypt keys saved
   from the Super Admin panel), and optional `GEMINI_MODEL` (defaults to
   `gemini-2.5-flash`), and the legacy `ASAAS_API_KEY`, `ASAAS_ENV` (`sandbox`
@@ -124,6 +125,15 @@ FastAPI, async throughout. `python` is the app venv interpreter
   this system by webhook. Administrators must periodically check the PagBank
   recurring panel and manually block a clinic whose subscription is canceled
   or unpaid, then restore it only after verifying payment.
+- **NEXO clinical drafts**: `/app/prontuario` can send audio to Groq for
+  Portuguese transcription, or accept typed consultation notes/diagnosis, then
+  asks Gemini to prepare specialty-specific fields and a SOAP-style draft.
+  Audio and clinical text are sent to the configured external AI providers.
+  Clinicians must review and confirm the generated record before saving; exam,
+  prescription, and orientation suggestions remain drafts and are never
+  executed automatically. Configure both provider keys in the backend key
+  vault or deployment secrets and verify provider availability before enabling
+  this workflow for a clinic.
 - **Dates**: `backend/lib/dates.py` — `today_iso(tz=None)`. The pod clock is
   UTC; anchor "today" server-side with this, never with client-side date math.
 - **Interactive check**: `cd /app/backend && python -c 'import server'` catches

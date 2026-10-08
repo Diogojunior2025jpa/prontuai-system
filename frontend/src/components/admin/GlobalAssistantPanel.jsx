@@ -34,8 +34,8 @@ export default function GlobalAssistantPanel() {
           {[
             ["API", monitor?.api === "online"],
             ["MongoDB", monitor?.database === "online"],
-            ["Groq · transcrição", monitor?.providers?.groq],
-            ["Gemini · relatórios", monitor?.providers?.gemini],
+            ["Voz NEXO", monitor?.providers?.groq],
+            ["NEXO · raciocínio", monitor?.providers?.gemini],
           ].map(([label, ready]) => (
             <div key={label} className="flex items-center justify-between gap-2 border-b border-[#283443] py-2 text-xs">
               <span className="text-slate-400">{label}</span>
@@ -52,7 +52,7 @@ export default function GlobalAssistantPanel() {
         ) : null}
         <div className="flex gap-2 border-l-2 border-sky-700 pl-3 text-xs leading-5 text-slate-400">
           <LockKeyhole className="mt-0.5 size-3.5 shrink-0 text-sky-400" />
-          <p>Gemini recebe apenas estado dos serviços e contagens agregadas. Não compartilhe dados clínicos ou pessoais; a IA recomenda ações, mas não altera o sistema.</p>
+          <p>NEXO recebe apenas estado dos serviços e contagens agregadas neste painel. Não compartilhe dados clínicos ou pessoais; ele recomenda ações, mas não altera o sistema.</p>
         </div>
         <form className="space-y-3" onSubmit={submit}>
           <Textarea

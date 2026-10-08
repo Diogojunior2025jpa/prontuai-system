@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2, Mic, Sparkles, Square } from "lucide-react";
 import { toast } from "sonner";
 import { apiPost, apiUpload } from "@/lib/api";
@@ -15,11 +15,33 @@ const SAMPLES = {
     "Paciente com queixa de visão embaçada para longe e cefaleia frontal. Acuidade visual olho direito vinte quarenta, olho esquerdo vinte e vinte e cinco. Pressão intraocular vinte e dois milímetros de mercúrio. Suspeita de hipertensão ocular. Conduta: colírio hipotensor e retorno em trinta dias.",
 };
 
-export default function VoiceDictationHUD({ template, onFields }) {
+const AUDIO_FORMATS = [
+  { mimeType: "audio/webm;codecs=opus", extension: "webm" },
+  { mimeType: "audio/webm", extension: "webm" },
+  { mimeType: "audio/mp4", extension: "m4a" },
+  { mimeType: "audio/ogg;codecs=opus", extension: "ogg" },
+];
+
+function supportedAudioFormat() {
+  if (typeof MediaRecorder === "undefined") return null;
+  return AUDIO_FORMATS.find((format) => MediaRecorder.isTypeSupported(format.mimeType)) || {
+    mimeType: "",
+    extension: "webm",
+  };
+}
+
+export default function VoiceDictationHUD({ template, onFields, onTranscriptChange }) {
   const [status, setStatus] = useState("idle"); // idle | recording | processing
   const [transcript, setTranscript] = useState("");
   const recorderRef = useRef(null);
   const chunksRef = useRef([]);
+  const streamRef = useRef(null);
+
+  useEffect(() => () => {
+    recorderRef.current = null;
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+  }, []);
 
   async function startRecording() {
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
@@ -28,12 +50,21 @@ export default function VoiceDictationHUD({ template, onFields }) {
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const format = supportedAudioFormat();
       chunksRef.current = [];
-      const rec = new MediaRecorder(stream);
+      streamRef.current = stream;
+      const rec = new MediaRecorder(stream, format?.mimeType ? { mimeType: format.mimeType } : undefined);
       rec.ondataavailable = (e) => { if (e.data.size) chunksRef.current.push(e.data); };
+      rec.onerror = () => {
+        stream.getTracks().forEach((track) => track.stop());
+        setStatus("idle");
+        toast.error("Falha na gravação. Tente novamente ou digite o relato.");
+      };
       rec.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        stream.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+        const mimeType = rec.mimeType || format?.mimeType || "audio/webm";
+        const blob = new Blob(chunksRef.current, { type: mimeType });
         if (blob.size < 1000) {
           setStatus("idle");
           toast.error("Áudio muito curto. Grave novamente.");
@@ -42,11 +73,16 @@ export default function VoiceDictationHUD({ template, onFields }) {
         setStatus("processing");
         try {
           const fd = new FormData();
-          fd.append("file", blob, "ditado.webm");
-          const res = await apiUpload(`/ai/transcribe?template=${template}`, fd);
+          fd.append("file", blob, `ditado.${format?.extension || "webm"}`);
+          const transcription = await apiUpload(`/ai/transcribe?template=${template}`, fd);
+          const res = await apiPost("/ai/clinical-draft", {
+            transcript: transcription.transcript,
+            template,
+          });
           setTranscript(res.transcript);
-          onFields(res.fields);
-          toast.success("Transcrição estruturada pela IA");
+          onTranscriptChange?.(res.transcript);
+          onFields(res.fields, res.transcript, res);
+          toast.success("Rascunho clínico preparado pelo NEXO");
         } catch (err) {
           toast.error(err?.body?.detail || "Falha na transcrição");
         } finally {
@@ -54,7 +90,7 @@ export default function VoiceDictationHUD({ template, onFields }) {
         }
       };
       recorderRef.current = rec;
-      rec.start();
+      rec.start(1000);
       setStatus("recording");
     } catch {
       toast.error("Permissão de microfone negada. Use o texto de exemplo abaixo.");
@@ -62,7 +98,9 @@ export default function VoiceDictationHUD({ template, onFields }) {
   }
 
   function stopRecording() {
-    recorderRef.current?.stop();
+    if (recorderRef.current?.state === "recording") {
+      recorderRef.current.stop();
+    }
   }
 
   async function structureText(text) {
@@ -72,20 +110,21 @@ export default function VoiceDictationHUD({ template, onFields }) {
       return;
     }
     setTranscript(value);
+    onTranscriptChange?.(value);
     setStatus("processing");
     try {
-      const res = await apiPost("/ai/structure", { transcript: value, template });
-      onFields(res.fields);
-      toast.success("Campos preenchidos pela IA");
+      const res = await apiPost("/ai/clinical-draft", { transcript: value, template });
+      onFields(res.fields, res.transcript, res);
+      toast.success("Rascunho clínico preparado pelo NEXO");
     } catch (err) {
-      toast.error(err?.body?.detail || "Falha ao estruturar com IA");
+      toast.error(err?.body?.detail || "Falha ao estruturar com NEXO");
     } finally {
       setStatus("idle");
     }
   }
 
   const label =
-    status === "recording" ? "Ouvindo…" : status === "processing" ? "IA estruturando…" : "Microfone pronto";
+    status === "recording" ? "Ouvindo…" : status === "processing" ? "NEXO estruturando…" : "Microfone pronto";
 
   return (
     <div
@@ -96,8 +135,12 @@ export default function VoiceDictationHUD({ template, onFields }) {
         <div>
           <p className="overline text-purple-300">Ditado inteligente</p>
           <p className="mt-1 text-sm text-purple-100/80" data-testid="voice-status-indicator">{label}</p>
+          <p className="mt-2 max-w-2xl text-xs leading-5 text-purple-100/60">
+            O áudio e o relato são enviados aos provedores de IA configurados para transcrição e organização.
+            Revise todos os campos e rascunhos antes de salvar.
+          </p>
         </div>
-        <Badge className="bg-[#312E81] text-indigo-300">Groq Whisper + GPT-OSS 120B</Badge>
+        <Badge className="bg-[#312E81] text-indigo-300">Voz + NEXO</Badge>
       </div>
 
       <div className="mt-4 flex items-center gap-4">
@@ -140,8 +183,11 @@ export default function VoiceDictationHUD({ template, onFields }) {
         <Textarea
           rows={4}
           value={transcript}
-          onChange={(e) => setTranscript(e.target.value)}
-          placeholder="A transcrição aparecerá aqui — você também pode digitar ou colar o relato e pedir para a IA estruturar."
+          onChange={(e) => {
+            setTranscript(e.target.value);
+            onTranscriptChange?.(e.target.value);
+          }}
+          placeholder="Dite ou descreva a consulta; você também pode informar diretamente o diagnóstico e os achados. O NEXO organizará somente o que foi informado."
           className="bg-[#0B0F17] border-purple-900/70"
           data-testid="voice-transcription-preview"
         />
@@ -153,7 +199,7 @@ export default function VoiceDictationHUD({ template, onFields }) {
             disabled={status !== "idle"}
             data-testid="ai-apply-fields-btn"
           >
-            <Sparkles className="size-4" /> Estruturar com IA
+            <Sparkles className="size-4" /> Gerar rascunho clínico
           </Button>
           <Button
             type="button"

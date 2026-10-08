@@ -24,7 +24,7 @@ const NAV = [
   { to: "/app/agenda", label: "Agenda", icon: Calendar, perm: "agenda.view" },
   { to: "/app/disponibilidade", label: "Disponibilidade", icon: Calendar, perm: "agenda.view", roles: ["clinic_admin", "professional"] },
   { to: "/app/pacientes", label: "Pacientes", icon: Users, perm: "patients.view" },
-  { to: "/app/prontuario", label: "Prontuário IA", icon: Stethoscope, perm: "records.view" },
+  { to: "/app/prontuario", label: "Prontuário NEXO", icon: Stethoscope, perm: "records.view" },
   { to: "/app/laudos", label: "Laudos Médicos", icon: FileText, perm: "records.view" },
   { to: "/app/equipe", label: "Equipe & Permissões", icon: UsersRound, perm: "team.manage" },
   { to: "/app/campanhas", label: "Marketing", icon: Megaphone, perm: "campaigns.send" },

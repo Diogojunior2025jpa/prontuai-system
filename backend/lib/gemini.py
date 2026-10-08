@@ -3,6 +3,7 @@
 import logging
 import os
 import re
+import json
 from urllib.parse import quote
 
 import httpx
@@ -64,7 +65,7 @@ async def _discover_model(client: httpx.AsyncClient, api_key: str) -> str | None
         return None
 
 
-async def generate_summary(system_instruction: str, prompt: str) -> tuple[str, str]:
+async def _generate_text(system_instruction: str, prompt: str, *, max_output_tokens: int = 700) -> tuple[str, str]:
     api_key = await get_provider_key("gemini")
     if not api_key:
         raise HTTPException(status_code=503, detail="GEMINI_API_KEY não configurada no backend/.env")
@@ -75,7 +76,7 @@ async def generate_summary(system_instruction: str, prompt: str) -> tuple[str, s
             request_body = {
                 "systemInstruction": {"parts": [{"text": system_instruction}]},
                 "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-                "generationConfig": {"temperature": 0.2, "maxOutputTokens": 700},
+                "generationConfig": {"temperature": 0.2, "maxOutputTokens": max_output_tokens},
             }
             response = await client.post(
                 _generate_url(model),
@@ -114,3 +115,26 @@ async def generate_summary(system_instruction: str, prompt: str) -> tuple[str, s
     if not answer:
         raise HTTPException(status_code=502, detail="Gemini não retornou um resumo")
     return answer, model
+
+
+async def generate_summary(system_instruction: str, prompt: str) -> tuple[str, str]:
+    return await _generate_text(system_instruction, prompt)
+
+
+async def generate_json(system_instruction: str, prompt: str, *, max_output_tokens: int = 1600) -> tuple[dict, str]:
+    answer, model = await _generate_text(
+        system_instruction,
+        prompt,
+        max_output_tokens=max_output_tokens,
+    )
+    cleaned = answer.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+    try:
+        parsed = json.loads(cleaned)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=502, detail="Gemini retornou JSON inválido") from exc
+    if not isinstance(parsed, dict):
+        raise HTTPException(status_code=502, detail="Gemini retornou um JSON fora do formato esperado")
+    return parsed, model

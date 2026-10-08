@@ -336,6 +336,47 @@ class StructureOut(BaseModel):
     model: str
 
 
+class ClinicalTranscriptionOut(BaseModel):
+    transcript: str
+    model: str
+
+
+class ClinicalDraftIn(BaseModel):
+    transcript: str = Field(min_length=1, max_length=12000)
+    template: Literal["geral", "odonto", "oftalmo"] = "geral"
+    patient_context: dict[str, Any] = Field(default_factory=dict)
+
+
+class ClinicalRecordSection(BaseModel):
+    title: str
+    content: str
+
+
+class ClinicalProfessionalRecord(BaseModel):
+    title: str = "Evolução clínica NEXO"
+    format: str = "SOAP"
+    content: str
+    sections: list[ClinicalRecordSection] = Field(default_factory=list)
+
+
+class ClinicalActionDraft(BaseModel):
+    type: Literal["exam", "prescription", "orientation", "warning"]
+    title: str
+    content: str
+    rationale: str = ""
+    requires_confirmation: bool = True
+
+
+class ClinicalDraftOut(BaseModel):
+    transcript: str
+    fields: dict[str, Any]
+    professional_record: ClinicalProfessionalRecord | None = None
+    actions: list[ClinicalActionDraft] = Field(default_factory=list)
+    safety_checks: list[str] = Field(default_factory=list)
+    model: str
+    review_required: bool = True
+
+
 # ---------- assistente ----------
 class AskIn(BaseModel):
     question: str
